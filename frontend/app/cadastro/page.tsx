@@ -39,8 +39,8 @@ function CadastroForm() {
     setError("");
     
     try {
-      // POST para a API NestJS que criamos
-      const response = await fetch("http://localhost:3000/users/register", {
+      // POST para a API NestJS que criamos (rodando na porta 3001)
+      const response = await fetch("http://localhost:3001/users/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
