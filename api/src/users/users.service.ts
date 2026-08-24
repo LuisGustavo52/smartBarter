@@ -1,38 +1,49 @@
-import { Injectable, ConflictException } from '@nestjs/common';
+import { Injectable, ConflictException, InternalServerErrorException } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
-
-// Interface interna simulando a entidade do banco de dados
-export interface User extends CreateUserDto {
-  id: string;
-  createdAt: Date;
-}
+import { SupabaseService } from '../supabase/supabase.service';
 
 @Injectable()
 export class UsersService {
-  // Simulador de banco de dados em memória para o MVP
-  private usersDatabase: User[] = [];
+  constructor(private readonly supabaseService: SupabaseService) {}
 
   async registerUser(createUserDto: CreateUserDto) {
-    // 1. Validação de Regra de Negócio: Não permitir carteiras duplicadas
-    const userExists = this.usersDatabase.find(
-      (u) => u.carteiraDigital.toLowerCase() === createUserDto.carteiraDigital.toLowerCase(),
-    );
+    const supabase = this.supabaseService.getClient();
 
-    if (userExists) {
+    // 1. Validação de Regra de Negócio: Não permitir carteiras duplicadas
+    const { data: existingUsers, error: searchError } = await supabase
+      .from('users')
+      .select('id')
+      .ilike('carteira_digital', createUserDto.carteiraDigital);
+
+    if (searchError) {
+      console.error('ERRO DETALHADO DO SUPABASE:', searchError);
+      throw new InternalServerErrorException('Erro ao verificar usuário no banco de dados.');
+    }
+
+    if (existingUsers && existingUsers.length > 0) {
       throw new ConflictException('Já existe um usuário cadastrado com esta carteira digital.');
     }
 
-    // 2. Simulação de Criação do Usuário
-    const newUser: User = {
-      ...createUserDto,
-      id: Math.random().toString(36).substring(2, 9), // Gera um ID aleatório
-      createdAt: new Date(),
-    };
+    // 2. Simulação de Criação do Usuário no banco
+    const { data: newUser, error: insertError } = await supabase
+      .from('users')
+      .insert([
+        {
+          nome_completo: createUserDto.nomeCompleto,
+          documento: createUserDto.documento,
+          tipo_usuario: createUserDto.tipoUsuario,
+          carteira_digital: createUserDto.carteiraDigital,
+          nome_propriedade_ou_empresa: createUserDto.nomePropriedadeOuEmpresa,
+        },
+      ])
+      .select()
+      .single();
 
-    // 3. Salva no banco de dados (array)
-    this.usersDatabase.push(newUser);
+    if (insertError) {
+      throw new InternalServerErrorException('Erro ao salvar usuário no banco de dados.');
+    }
 
-    // 4. Retorna os dados simulando a confirmação do banco
+    // 4. Retorna os dados
     return {
       message: 'Usuário cadastrado com sucesso!',
       user: newUser,
@@ -41,6 +52,10 @@ export class UsersService {
 
   // Método auxiliar caso queira listar na reunião para mostrar que salvou
   async findAll() {
-    return this.usersDatabase;
+    const { data, error } = await this.supabaseService.getClient().from('users').select('*');
+    if (error) {
+      throw new InternalServerErrorException('Erro ao buscar usuários.');
+    }
+    return data;
   }
 }
