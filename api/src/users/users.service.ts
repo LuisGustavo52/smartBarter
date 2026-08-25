@@ -45,8 +45,7 @@ export class UsersService {
 
     // 4. Retorna os dados
     return {
-      message: 'Usuário cadastrado com sucesso!',
-      user: newUser,
+      id: newUser.id,
     };
   }
 
@@ -57,5 +56,21 @@ export class UsersService {
       throw new InternalServerErrorException('Erro ao buscar usuários.');
     }
     return data;
+  }
+
+  async checkWalletExists(address: string) {
+    const supabase = this.supabaseService.getClient();
+    const { data, error } = await supabase
+      .from('users')
+      .select('id')
+      .ilike('carteira_digital', address)
+      .maybeSingle();
+
+    if (error) {
+      console.error('ERRO AO VERIFICAR CARTEIRA:', error);
+      throw new InternalServerErrorException('Erro ao verificar carteira no banco de dados.');
+    }
+
+    return { exists: !!data };
   }
 }

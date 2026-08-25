@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Fraunces } from "next/font/google";
-import { WalletProvider } from "./lib/web3/WalletContext";
+import { ThirdwebProviderWrapper } from "./ThirdwebProviderWrapper";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -24,15 +24,16 @@ export const metadata: Metadata = {
   description: "Troca de bens vinculada à sua carteira Web3.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="pt-BR"
       className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <WalletProvider>{children}</WalletProvider>
+        <ThirdwebProviderWrapper>{children}</ThirdwebProviderWrapper>
       </body>
     </html>
   );
 }
+

@@ -4,12 +4,14 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { UsersModule } from './users/users.module';
 import { SupabaseModule } from './supabase/supabase.module';
+import { AssetsModule } from './assets/assets.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     SupabaseModule,
     UsersModule,
+    AssetsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
