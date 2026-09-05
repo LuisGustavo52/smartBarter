@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsEnum, Matches } from 'class-validator';
+import { IsString, IsNotEmpty, IsEnum, Matches, IsObject } from 'class-validator';
 
 // Enumeração para garantir que apenas os dois tipos de usuários sejam aceitos
 export enum TipoUsuario {
@@ -27,4 +27,12 @@ export class CreateUserDto {
   @IsString()
   @IsNotEmpty({ message: 'O nome da propriedade ou empresa é obrigatório' })
   nomePropriedadeOuEmpresa: string;
+
+  @IsObject({ message: 'O payload de autenticação é obrigatório' })
+  @IsNotEmpty()
+  payload: any;
+
+  @IsString()
+  @IsNotEmpty({ message: 'A assinatura é obrigatória' })
+  signature: string;
 }

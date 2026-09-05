@@ -1,15 +1,44 @@
-import { Injectable, ConflictException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, ConflictException, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { SupabaseService } from '../supabase/supabase.service';
+import { verifyLoginPayload } from 'thirdweb/auth';
+import { createThirdwebClient } from 'thirdweb';
+
+const client = createThirdwebClient({
+  clientId: process.env.THIRDWEB_CLIENT_ID || 'd3690d56bdafa6a3cd84d948259dbbe0',
+});
 
 @Injectable()
 export class UsersService {
   constructor(private readonly supabaseService: SupabaseService) {}
 
   async registerUser(createUserDto: CreateUserDto) {
+    // 1. Verificação SIWE (Sign-In With Ethereum) via Thirdweb Auth
+    try {
+      const result = await verifyLoginPayload({
+        payload: createUserDto.payload,
+        signature: createUserDto.signature,
+        client,
+      });
+
+      if (!result.valid) {
+        throw new UnauthorizedException('Assinatura inválida ou expirada.');
+      }
+
+      if (result.payload.address.toLowerCase() !== createUserDto.carteiraDigital.toLowerCase()) {
+        throw new UnauthorizedException('A assinatura não corresponde à carteira digital informada.');
+      }
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        throw error;
+      }
+      console.error('Erro ao verificar payload SIWE:', error);
+      throw new UnauthorizedException('Falha na verificação da carteira. Assinatura inválida.');
+    }
+
     const supabase = this.supabaseService.getClient();
 
-    // 1. Validação de Regra de Negócio: Não permitir carteiras duplicadas
+    // 2. Validação de Regra de Negócio: Não permitir carteiras duplicadas
     const { data: existingUsers, error: searchError } = await supabase
       .from('users')
       .select('id')
@@ -24,7 +53,7 @@ export class UsersService {
       throw new ConflictException('Já existe um usuário cadastrado com esta carteira digital.');
     }
 
-    // 2. Simulação de Criação do Usuário no banco
+    // 3. Simulação de Criação do Usuário no banco
     const { data: newUser, error: insertError } = await supabase
       .from('users')
       .insert([

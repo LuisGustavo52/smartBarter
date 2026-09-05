@@ -3,11 +3,17 @@
 import { useState, useEffect } from "react";
 import { ThirdwebProvider, ConnectButton, useActiveAccount } from "thirdweb/react";
 import { createThirdwebClient } from "thirdweb";
+import { createAuth, signLoginPayload } from "thirdweb/auth";
 import { useRouter } from "next/navigation";
 
 // Configuração do Cliente Thirdweb v5
 const client = createThirdwebClient({
   clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "d3690d56bdafa6a3cd84d948259dbbe0",
+});
+
+const auth = createAuth({
+  domain: process.env.NEXT_PUBLIC_DOMAIN || "localhost:3000",
+  client,
 });
 
 function CadastroFlow() {
@@ -78,12 +84,19 @@ function CadastroFlow() {
     setError("");
     
     try {
+      // 1. Gera Payload e Solicita Assinatura (SIWE) do Usuário
+      const payload = await auth.generatePayload({ address: account.address });
+      const signature = await signLoginPayload({ account, payload });
+
+      // 2. Envia para a API NestJS
       const response = await fetch("http://localhost:3001/users/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
           carteiraDigital: account.address,
+          payload,
+          signature
         }),
       });
 
