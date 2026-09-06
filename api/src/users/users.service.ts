@@ -1,11 +1,16 @@
 import { Injectable, ConflictException, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { SupabaseService } from '../supabase/supabase.service';
-import { verifyLoginPayload } from 'thirdweb/auth';
+import { createAuth } from 'thirdweb/auth';
 import { createThirdwebClient } from 'thirdweb';
 
 const client = createThirdwebClient({
   clientId: process.env.THIRDWEB_CLIENT_ID || 'd3690d56bdafa6a3cd84d948259dbbe0',
+});
+
+const auth = createAuth({
+  domain: process.env.DOMAIN || 'localhost:3000',
+  client,
 });
 
 @Injectable()
@@ -15,10 +20,9 @@ export class UsersService {
   async registerUser(createUserDto: CreateUserDto) {
     // 1. Verificação SIWE (Sign-In With Ethereum) via Thirdweb Auth
     try {
-      const result = await verifyLoginPayload({
+      const result = await auth.verifyPayload({
         payload: createUserDto.payload,
         signature: createUserDto.signature,
-        client,
       });
 
       if (!result.valid) {
