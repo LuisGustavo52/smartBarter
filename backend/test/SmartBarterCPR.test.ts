@@ -175,4 +175,35 @@ describe("SmartBarterCPR", async function () {
       "SmartBarter: CPR ja liquidada ou inexistente"
     );
   });
+
+  // j) getPropostasPendentesPorFornecedor retorna corretamente as propostas de um fornecedor
+  it("j) getPropostasPendentesPorFornecedor retorna corretamente as propostas de um fornecedor", async function () {
+    const { cprContract, produtor, fornecedor, outro } = await networkHelpers.loadFixture(deployContractFixture);
+
+    // Cria 2 propostas para 'fornecedor' e 1 para 'outro'
+    await cprContract.write.proporCPR([fornecedor.account.address, 10n, "Cafe"], { account: produtor.account }); // ID 0
+    await cprContract.write.proporCPR([fornecedor.account.address, 20n, "Milho"], { account: produtor.account }); // ID 1
+    await cprContract.write.proporCPR([outro.account.address, 30n, "Soja"], { account: produtor.account }); // ID 2
+
+    // Aceita a proposta ID 1 do fornecedor (para ela deixar de ser pendente)
+    await cprContract.write.aceitarProposta([1n], { account: fornecedor.account });
+
+    // Testa a leitura para 'fornecedor' (deve ter apenas a ID 0 pendente)
+    const [idsFornecedor, propostasFornecedor] = await cprContract.read.getPropostasPendentesPorFornecedor([fornecedor.account.address]);
+    assert.equal(idsFornecedor.length, 1);
+    assert.equal(idsFornecedor[0], 0n);
+    assert.equal(propostasFornecedor.length, 1);
+    assert.equal(propostasFornecedor[0].insumo, "Cafe");
+
+    // Testa a leitura para 'outro' (deve ter a ID 2 pendente)
+    const [idsOutro, propostasOutro] = await cprContract.read.getPropostasPendentesPorFornecedor([outro.account.address]);
+    assert.equal(idsOutro.length, 1);
+    assert.equal(idsOutro[0], 2n);
+    assert.equal(propostasOutro[0].insumo, "Soja");
+
+    // Testa para a propria carteira do produtor (nao e fornecedor de nada, array vazio)
+    const [idsProd, propostasProd] = await cprContract.read.getPropostasPendentesPorFornecedor([produtor.account.address]);
+    assert.equal(idsProd.length, 0);
+    assert.equal(propostasProd.length, 0);
+  });
 });

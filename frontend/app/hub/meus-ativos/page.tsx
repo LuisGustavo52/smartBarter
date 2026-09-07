@@ -54,6 +54,11 @@ export default function MeusAtivosPage() {
           </div>
           
           <div className="relative z-10">
+            <div className="flex gap-6 mb-4">
+              <Link href="/hub/meus-ativos" className="text-emerald-400 font-bold border-b-2 border-emerald-400 pb-1">Meus Ativos</Link>
+              <Link href="/hub/novo-ativo" className="text-white hover:text-emerald-300 transition-colors pb-1">Novo Ativo</Link>
+              <Link href="/hub/propostas" className="text-white hover:text-emerald-300 transition-colors pb-1">Propostas CPR</Link>
+            </div>
             <h1 className="text-3xl font-serif font-bold mb-2">Meus Ativos (RWA)</h1>
             <p className="text-emerald-100/80 text-sm max-w-md">
               Gerencie seus ativos físicos registrados e assine a emissão de CPR na blockchain.
@@ -149,8 +154,7 @@ export default function MeusAtivosPage() {
                   <div className="pt-6 border-t border-gray-100">
                     <p className="text-xs text-gray-500 font-semibold uppercase mb-4 text-center">Ação na Blockchain</p>
                     <BotaoAssinarAcordo 
-                      fornecedorAddress={account.address} 
-                      quantidadeSacas={BigInt(ativo.quantidade)} 
+                      quantidadeSacasOriginal={BigInt(ativo.quantidade)} 
                       descricaoInsumo={ativo.descricao}
                     />
                   </div>

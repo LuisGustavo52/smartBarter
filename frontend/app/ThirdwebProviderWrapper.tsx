@@ -2,6 +2,7 @@
 
 import { ThirdwebProvider, AutoConnect } from "thirdweb/react";
 import { createThirdwebClient } from "thirdweb";
+import { smartBarterLocalChain } from "@/lib/smartBarterChain";
 
 const client = createThirdwebClient({
   clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "d3690d56bdafa6a3cd84d948259dbbe0",

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ThirdwebProvider, ConnectButton, useActiveAccount } from "thirdweb/react";
+import { ConnectButton, useActiveAccount } from "thirdweb/react";
+import { smartBarterLocalChain } from "@/lib/smartBarterChain";
 import { createThirdwebClient } from "thirdweb";
 import { createAuth, signLoginPayload } from "thirdweb/auth";
 import { useRouter } from "next/navigation";
@@ -122,7 +123,8 @@ function CadastroFlow() {
       {/* Botão sempre montado para evitar quebra de estado do Modal da Thirdweb */}
       <div className={`w-full max-w-2xl flex ${account ? 'justify-end mb-4' : 'justify-center scale-110 mt-10'}`}>
         <ConnectButton 
-          client={client} 
+          client={client}
+          chain={smartBarterLocalChain} 
           connectButton={{ label: "Ativar Identidade Digital" }}
         />
       </div>

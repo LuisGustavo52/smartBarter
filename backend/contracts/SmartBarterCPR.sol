@@ -82,4 +82,25 @@ contract SmartBarterCPR is ERC721 {
 
         emit CPRLiquidada(_tokenId);
     }
+
+    function getPropostasPendentesPorFornecedor(address _fornecedor)
+        external view returns (uint256[] memory ids, Proposta[] memory pendentes) {
+        uint256 count = 0;
+        for (uint256 i = 0; i < _nextPropostaId; i++) {
+            if (propostas[i].fornecedor == _fornecedor && propostas[i].pendente) {
+                count++;
+            }
+        }
+        ids = new uint256[](count);
+        pendentes = new Proposta[](count);
+        uint256 index = 0;
+        for (uint256 i = 0; i < _nextPropostaId; i++) {
+            if (propostas[i].fornecedor == _fornecedor && propostas[i].pendente) {
+                ids[index] = i;
+                pendentes[index] = propostas[i];
+                index++;
+            }
+        }
+        return (ids, pendentes);
+    }
 }
