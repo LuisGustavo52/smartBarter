@@ -72,21 +72,17 @@ describe("SmartBarterCPR", async function () {
     return { cprContract, produtor, fornecedor, outro, publicClient, propostaId, sacas, insumo };
   }
 
-  // c) fornecedor correto consegue aceitar e recebe o NFT
-  it("c) fornecedor correto consegue aceitar e recebe o NFT", async function () {
+  // c) fornecedor correto consegue aceitar a proposta
+  it("c) fornecedor correto consegue aceitar a proposta", async function () {
     const { cprContract, fornecedor, propostaId, sacas, insumo } = await networkHelpers.loadFixture(proposeCprFixture);
 
     const hash = await cprContract.write.aceitarProposta([propostaId], { account: fornecedor.account });
     
     await viem.assertions.emitWithArgs(hash, cprContract, "PropostaAceita", [propostaId]);
-    await viem.assertions.emitWithArgs(hash, cprContract, "CPREmitida", [propostaId, fornecedor.account.address, sacas, insumo]);
 
     const proposta = await cprContract.read.propostas([propostaId]);
     assert.equal(proposta[4], true); // ativa
     assert.equal(proposta[5], false); // pendente
-
-    const owner = await cprContract.read.ownerOf([propostaId]);
-    assert.equal(owner.toLowerCase(), fornecedor.account.address.toLowerCase());
   });
 
   // d) uma carteira que NAO e o fornecedor da proposta tenta aceitar -> deve reverter
@@ -132,13 +128,62 @@ describe("SmartBarterCPR", async function () {
   async function acceptedCprFixture() {
     const { cprContract, produtor, fornecedor, outro, publicClient, propostaId, sacas, insumo } = await networkHelpers.loadFixture(proposeCprFixture);
     await cprContract.write.aceitarProposta([propostaId], { account: fornecedor.account });
+    return { cprContract, produtor, fornecedor, outro, publicClient, propostaId, sacas, insumo };
+  }
+
+  // g) Produtor consegue confirmar e o NFT é mintado pro fornecedor
+  it("g) Produtor consegue confirmar e o NFT e mintado pro fornecedor", async function () {
+    const { cprContract, produtor, fornecedor, propostaId, sacas, insumo } = await networkHelpers.loadFixture(acceptedCprFixture);
+
+    const hash = await cprContract.write.confirmarRecebimentoInsumo([propostaId], { account: produtor.account });
+    
+    await viem.assertions.emitWithArgs(hash, cprContract, "InsumoConfirmado", [propostaId]);
+    await viem.assertions.emitWithArgs(hash, cprContract, "CPREmitida", [propostaId, fornecedor.account.address, sacas, insumo]);
+
+    const proposta = await cprContract.read.propostas([propostaId]);
+    assert.equal(proposta[6], true); // insumoConfirmado
+
+    const owner = await cprContract.read.ownerOf([propostaId]);
+    assert.equal(owner.toLowerCase(), fornecedor.account.address.toLowerCase());
+  });
+
+  // h) Fornecedor (ou qualquer outra carteira) NAO consegue chamar confirmarRecebimentoInsumo
+  it("h) Fornecedor ou outro NAO consegue chamar confirmarRecebimentoInsumo", async function () {
+    const { cprContract, fornecedor, outro, propostaId } = await networkHelpers.loadFixture(acceptedCprFixture);
+
+    await viem.assertions.revertWith(
+      cprContract.write.confirmarRecebimentoInsumo([propostaId], { account: fornecedor.account }),
+      "Somente o produtor pode confirmar"
+    );
+    await viem.assertions.revertWith(
+      cprContract.write.confirmarRecebimentoInsumo([propostaId], { account: outro.account }),
+      "Somente o produtor pode confirmar"
+    );
+  });
+
+  // i) Não é possível confirmar duas vezes a mesma proposta
+  it("i) Nao e possivel confirmar duas vezes a mesma proposta", async function () {
+    const { cprContract, produtor, propostaId } = await networkHelpers.loadFixture(acceptedCprFixture);
+
+    await cprContract.write.confirmarRecebimentoInsumo([propostaId], { account: produtor.account });
+
+    await viem.assertions.revertWith(
+      cprContract.write.confirmarRecebimentoInsumo([propostaId], { account: produtor.account }),
+      "Insumo ja confirmado"
+    );
+  });
+
+  // Helper function to propose, accept and confirm a CPR
+  async function confirmedCprFixture() {
+    const { cprContract, produtor, fornecedor, outro, publicClient, propostaId, sacas, insumo } = await networkHelpers.loadFixture(acceptedCprFixture);
+    await cprContract.write.confirmarRecebimentoInsumo([propostaId], { account: produtor.account });
     const tokenId = propostaId;
     return { cprContract, produtor, fornecedor, outro, publicClient, tokenId };
   }
 
-  // g) fornecedor (dono do token) consegue liquidar -> token e queimado (ownerOf deve reverter depois)
-  it("g) fornecedor (dono do token) consegue liquidar -> token e queimado (ownerOf deve reverter depois)", async function () {
-    const { cprContract, fornecedor, tokenId } = await networkHelpers.loadFixture(acceptedCprFixture);
+  // j) fornecedor (dono do token) consegue liquidar -> token e queimado (ownerOf deve reverter depois)
+  it("j) fornecedor (dono do token) consegue liquidar -> token e queimado", async function () {
+    const { cprContract, fornecedor, tokenId } = await networkHelpers.loadFixture(confirmedCprFixture);
 
     const hash = await cprContract.write.liquidarCPR([tokenId], { account: fornecedor.account });
     await viem.assertions.emitWithArgs(hash, cprContract, "CPRLiquidada", [tokenId]);
@@ -154,9 +199,9 @@ describe("SmartBarterCPR", async function () {
     );
   });
 
-  // h) uma carteira diferente do fornecedor tenta liquidar -> deve reverter
-  it("h) uma carteira diferente do fornecedor tenta liquidar -> deve reverter", async function () {
-    const { cprContract, outro, tokenId } = await networkHelpers.loadFixture(acceptedCprFixture);
+  // k) uma carteira diferente do fornecedor tenta liquidar -> deve reverter
+  it("k) uma carteira diferente do fornecedor tenta liquidar -> deve reverter", async function () {
+    const { cprContract, outro, tokenId } = await networkHelpers.loadFixture(confirmedCprFixture);
 
     await viem.assertions.revertWith(
       cprContract.write.liquidarCPR([tokenId], { account: outro.account }),
@@ -164,9 +209,9 @@ describe("SmartBarterCPR", async function () {
     );
   });
 
-  // i) tentar liquidar a mesma CPR duas vezes -> deve reverter
-  it("i) tentar liquidar a mesma CPR duas vezes -> deve reverter", async function () {
-    const { cprContract, fornecedor, tokenId } = await networkHelpers.loadFixture(acceptedCprFixture);
+  // l) tentar liquidar a mesma CPR duas vezes -> deve reverter
+  it("l) tentar liquidar a mesma CPR duas vezes -> deve reverter", async function () {
+    const { cprContract, fornecedor, tokenId } = await networkHelpers.loadFixture(confirmedCprFixture);
 
     await cprContract.write.liquidarCPR([tokenId], { account: fornecedor.account });
 
