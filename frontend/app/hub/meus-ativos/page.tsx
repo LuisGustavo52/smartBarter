@@ -7,6 +7,7 @@ import BotaoLiquidarCPR from "@/components/BotaoLiquidarCPR";
 import Link from "next/link";
 import { getContract, prepareEvent, readContract, createThirdwebClient, parseEventLogs } from "thirdweb";
 import { smartBarterLocalChain } from "@/lib/smartBarterChain";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 // Inicializa o cliente Thirdweb
 const client = createThirdwebClient({
@@ -41,6 +42,25 @@ export default function MeusAtivosPage() {
   const [cprsOnChain, setCprsOnChain] = useState<any[]>([]);
   const [isPendingCprs, setIsPendingCprs] = useState(false);
   const [refreshCounter, setRefreshCounter] = useState(0);
+
+  // --- MARKET DATA STATE ---
+  const [marketData, setMarketData] = useState<any>(null);
+  const [marketError, setMarketError] = useState("");
+
+  // Busca dados de mercado
+  useEffect(() => {
+    async function fetchMarket() {
+      try {
+        const res = await fetch("http://localhost:3001/market/cafe");
+        if (!res.ok) throw new Error("Cotação indisponível");
+        const data = await res.json();
+        setMarketData(data);
+      } catch (err: any) {
+        setMarketError(err.message);
+      }
+    }
+    fetchMarket();
+  }, []);
 
   // Busca ativos OFF-CHAIN (NestJS)
   useEffect(() => {
@@ -296,13 +316,50 @@ export default function MeusAtivosPage() {
                         <h3 className="text-2xl font-bold text-gray-900 mb-1">{cpr.insumo}</h3>
                         <p className="text-emerald-700 font-bold text-lg mb-4">{cpr.sacas.toString()} Sacas Garantidas</p>
                         
-                        <div className="bg-gray-50 rounded-xl p-3 inline-flex items-center gap-2 border border-gray-100">
+                        <div className="bg-gray-50 rounded-xl p-3 inline-flex items-center gap-2 border border-gray-100 mb-6">
                           <span className="text-xs text-gray-500 font-bold uppercase">Emitente (Produtor):</span>
                           <span className="font-mono text-sm text-gray-700">{cpr.produtor}</span>
                         </div>
+
+                        {/* Gráfico de Mercado */}
+                        <div className="w-full bg-gray-50 rounded-2xl p-5 border border-gray-100 mt-2">
+                          <div className="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-2">
+                            <h4 className="text-sm font-bold text-gray-700 uppercase">Cotação do Café (KC=F)</h4>
+                            {marketData && (
+                              <span className="text-emerald-800 font-bold bg-emerald-100/80 border border-emerald-200 px-3 py-1 rounded-lg text-sm text-center">
+                                Valor de Liquidação Estimado Hoje: US$ {(marketData.precoAtualUsdSaca * Number(cpr.sacas)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                              </span>
+                            )}
+                          </div>
+                          
+                          {marketError ? (
+                            <div className="h-32 flex items-center justify-center text-sm text-gray-400 italic bg-gray-100/50 rounded-xl border border-dashed border-gray-300">
+                              Cotação indisponível no momento
+                            </div>
+                          ) : !marketData ? (
+                            <div className="h-32 flex items-center justify-center bg-gray-100/50 rounded-xl">
+                              <div className="w-6 h-6 border-2 border-emerald-100 border-t-emerald-600 rounded-full animate-spin"></div>
+                            </div>
+                          ) : (
+                            <div className="h-32 w-full bg-white rounded-xl border border-gray-100 pt-2 shadow-sm">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={marketData.historico}>
+                                  <XAxis dataKey="data" hide />
+                                  <YAxis domain={['auto', 'auto']} hide />
+                                  <Tooltip 
+                                    formatter={(value: any) => [`US$ ${Number(value).toFixed(2)}`, 'Preço/Saca']}
+                                    labelFormatter={(label) => `Data: ${label}`}
+                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                  />
+                                  <Line type="monotone" dataKey="precoUsdSaca" stroke="#10b981" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </div>
+                          )}
+                        </div>
                       </div>
                       
-                      <div className="w-full md:w-auto flex justify-end">
+                      <div className="w-full flex justify-end mt-4 md:mt-0 md:pl-6 border-t md:border-t-0 md:border-l border-gray-100 pt-6 md:pt-0">
                         <BotaoLiquidarCPR contract={myContract} tokenId={cpr.id} onSuccess={handleSuccess} />
                       </div>
                     </div>
