@@ -1,9 +1,11 @@
+"use client";
+
 import { useEffect, useState } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import BotaoAssinarAcordo from "@/components/BotaoAssinarAcordo";
 import BotaoLiquidarCPR from "@/components/BotaoLiquidarCPR";
 import Link from "next/link";
-import { getContract, prepareEvent, getContractEvents, readContract, createThirdwebClient } from "thirdweb";
+import { getContract, prepareEvent, readContract, createThirdwebClient, parseEventLogs } from "thirdweb";
 import { smartBarterLocalChain } from "@/lib/smartBarterChain";
 
 // Inicializa o cliente Thirdweb
@@ -74,10 +76,26 @@ export default function MeusAtivosPage() {
           signature: "event CPREmitida(uint256 indexed tokenId, address indexed fornecedor, uint256 sacas, string insumo)",
         });
 
-        const events = await getContractEvents({
-          contract: myContract,
+        // 1. Buscar todos os eventos de criacao (bypassando thirdweb proxy)
+        const rawResponse = await fetch("http://127.0.0.1:8545", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "eth_getLogs",
+            params: [{
+              address: myContract.address,
+              fromBlock: "0x0",
+              toBlock: "latest"
+            }]
+          })
+        });
+        const rawData = await rawResponse.json();
+
+        const events = parseEventLogs({
+          logs: rawData.result || [],
           events: [event],
-          fromBlock: 0n,
         });
 
         const meusEventos = events.filter(

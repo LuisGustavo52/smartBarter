@@ -1,6 +1,8 @@
+"use client";
+
 import { useState, useEffect } from "react";
 import { useActiveAccount, useReadContract } from "thirdweb/react";
-import { getContract, prepareContractCall, sendTransaction, prepareEvent, getContractEvents, readContract } from "thirdweb";
+import { getContract, prepareContractCall, sendTransaction, prepareEvent, getContractEvents, readContract, parseEventLogs } from "thirdweb";
 import { smartBarterLocalChain } from "@/lib/smartBarterChain";
 import { createThirdwebClient } from "thirdweb";
 import Link from "next/link";
@@ -86,12 +88,7 @@ export default function PropostasPage() {
   const { data, isPending, refetch } = useReadContract({
     contract: myContract,
     method: "function getPropostasPendentesPorFornecedor(address _fornecedor) external view returns (uint256[] ids, (address produtor, address fornecedor, uint256 sacas, string insumo, bool ativa, bool pendente, bool insumoConfirmado)[] pendentes)",
-    params: [addressToSearch],
-    queryOptions: {
-      staleTime: 0,
-      refetchOnMount: true,
-      refetchOnWindowFocus: true,
-    }
+    params: [addressToSearch]
   });
 
   // --- LEITURA PRODUTOR ---
@@ -105,11 +102,26 @@ export default function PropostasPage() {
           signature: "event PropostaCriada(uint256 indexed propostaId, address indexed produtor, address indexed fornecedor, uint256 sacas, string insumo)",
         });
 
-        // 1. Buscar todos os eventos de criacao
-        const events = await getContractEvents({
-          contract: myContract,
+        // 1. Buscar todos os eventos de criacao (bypassando thirdweb proxy)
+        const rawResponse = await fetch("http://127.0.0.1:8545", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "eth_getLogs",
+            params: [{
+              address: myContract.address,
+              fromBlock: "0x0",
+              toBlock: "latest"
+            }]
+          })
+        });
+        const rawData = await rawResponse.json();
+
+        const events = parseEventLogs({
+          logs: rawData.result || [],
           events: [event],
-          fromBlock: 0n,
         });
 
         // 2. Filtrar os eventos onde o produtor e a conta atual
@@ -129,7 +141,9 @@ export default function PropostasPage() {
             });
 
             // Queremos apenas as ATIVAS (aceitas pelo fornecedor) e NÃO CONFIRMADAS ainda
-            if (p[4] === true && p[6] === false) {
+            const condition = p[4] === true && p[6] === false;
+
+            if (condition) {
               propostasAtivas.push({
                 id: pId,
                 produtor: p[0],
@@ -270,7 +284,7 @@ export default function PropostasPage() {
                 </div>
               ) : data && data[0].length > 0 ? (
                 <div className="grid grid-cols-1 gap-6">
-                  {data[0].map((id, index) => {
+                  {data[0].map((id: any, index: number) => {
                     const proposta = data[1][index];
                     return (
                       <div key={id.toString()} className="bg-white rounded-3xl shadow-sm border border-emerald-100 p-6 flex flex-col md:flex-row items-center justify-between gap-6 transition-all hover:shadow-md hover:border-emerald-300">

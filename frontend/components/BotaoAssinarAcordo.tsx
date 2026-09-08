@@ -56,7 +56,7 @@ export default function BotaoAssinarAcordo({
     }
 
     const qtdSacas = BigInt(sacas);
-    if (qtdSacas <= 0n) {
+    if (qtdSacas <= BigInt(0)) {
       alert("A quantidade de sacas deve ser maior que zero.");
       return;
     }
