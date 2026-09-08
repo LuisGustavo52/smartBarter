@@ -94,6 +94,7 @@ function NovoAtivoDashboard() {
               <Link href="/hub/meus-ativos" className="text-white hover:text-emerald-300 transition-colors pb-1">Meus Ativos</Link>
               <Link href="/hub/novo-ativo" className="text-emerald-400 font-bold border-b-2 border-emerald-400 pb-1">Novo Ativo</Link>
               <Link href="/hub/propostas" className="text-white hover:text-emerald-300 transition-colors pb-1">Propostas CPR</Link>
+              <Link href="/hub/vitrine" className="text-white hover:text-emerald-300 transition-colors pb-1">Vitrine de Insumos</Link>
             </div>
             <h1 className="text-3xl font-serif font-bold mb-2">Visão Geral da Propriedade</h1>
             <p className="text-emerald-100/80 text-sm max-w-md">
