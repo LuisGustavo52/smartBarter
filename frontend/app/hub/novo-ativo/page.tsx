@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 
 function NovoAtivoDashboard() {
   const router = useRouter();
@@ -90,12 +89,6 @@ function NovoAtivoDashboard() {
           </div>
           
           <div className="relative z-10">
-            <div className="flex gap-6 mb-4">
-              <Link href="/hub/meus-ativos" className="text-white hover:text-emerald-300 transition-colors pb-1">Meus Ativos</Link>
-              <Link href="/hub/novo-ativo" className="text-emerald-400 font-bold border-b-2 border-emerald-400 pb-1">Novo Ativo</Link>
-              <Link href="/hub/propostas" className="text-white hover:text-emerald-300 transition-colors pb-1">Propostas CPR</Link>
-              <Link href="/hub/vitrine" className="text-white hover:text-emerald-300 transition-colors pb-1">Vitrine de Insumos</Link>
-            </div>
             <h1 className="text-3xl font-serif font-bold mb-2">Visão Geral da Propriedade</h1>
             <p className="text-emerald-100/80 text-sm max-w-md">
               Bem-vindo ao seu painel. Acompanhe a saúde da sua safra e cadastre novos ativos físicos para transformá-los em liquidez na blockchain.
@@ -227,9 +220,5 @@ function NovoAtivoDashboard() {
 }
 
 export default function NovoAtivoPage() {
-  return (
-    <div className="min-h-screen bg-[#F8FAF9] text-gray-900 font-sans selection:bg-emerald-200 selection:text-emerald-900">
-      <NovoAtivoDashboard />
-    </div>
-  );
+  return <NovoAtivoDashboard />;
 }

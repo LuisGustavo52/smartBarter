@@ -4,10 +4,10 @@ import { useEffect, useState } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import BotaoAssinarAcordo from "@/components/BotaoAssinarAcordo";
 import BotaoLiquidarCPR from "@/components/BotaoLiquidarCPR";
-import Link from "next/link";
-import { getContract, prepareEvent, readContract, createThirdwebClient, parseEventLogs } from "thirdweb";
+import { getContract, prepareEvent, readContract, createThirdwebClient } from "thirdweb";
 import { smartBarterLocalChain } from "@/lib/smartBarterChain";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { fetchRawEvents } from "@/lib/blockchain-queries";
 
 // Inicializa o cliente Thirdweb
 const client = createThirdwebClient({
@@ -92,31 +92,10 @@ export default function MeusAtivosPage() {
       setIsPendingCprs(true);
 
       try {
-        const event = prepareEvent({
-          signature: "event CPREmitida(uint256 indexed tokenId, address indexed fornecedor, uint256 sacas, string insumo)",
-        });
-
-        // 1. Buscar todos os eventos de criacao (bypassando thirdweb proxy)
-        const rawResponse = await fetch("http://127.0.0.1:8545", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "eth_getLogs",
-            params: [{
-              address: myContract.address,
-              fromBlock: "0x0",
-              toBlock: "latest"
-            }]
-          })
-        });
-        const rawData = await rawResponse.json();
-
-        const events = parseEventLogs({
-          logs: rawData.result || [],
-          events: [event],
-        });
+        const events = await fetchRawEvents(
+          myContract.address, 
+          "event CPREmitida(uint256 indexed tokenId, address indexed fornecedor, uint256 sacas, string insumo)"
+        );
 
         const meusEventos = events.filter(
           (e: any) => e.args.fornecedor?.toLowerCase() === account.address.toLowerCase()
@@ -161,23 +140,16 @@ export default function MeusAtivosPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAF9] text-gray-900 font-sans selection:bg-emerald-200 selection:text-emerald-900">
-      <div className="max-w-6xl mx-auto py-12 px-6 animate-in fade-in duration-700">
+    <div className="max-w-6xl mx-auto py-12 px-6 animate-in fade-in duration-700">
+      
+      {/* Banner Superior */}
+      <div className="bg-[#0A1A14] text-white rounded-3xl p-8 mb-10 shadow-xl relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+          <svg className="w-48 h-48" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        </div>
         
-        {/* Banner Superior */}
-        <div className="bg-[#0A1A14] text-white rounded-3xl p-8 mb-10 shadow-xl relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-            <svg className="w-48 h-48" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-          </div>
-          
-          <div className="relative z-10">
-            <div className="flex gap-6 mb-4">
-              <Link href="/hub/meus-ativos" className="text-emerald-400 font-bold border-b-2 border-emerald-400 pb-1">Meus Ativos</Link>
-              <Link href="/hub/novo-ativo" className="text-white hover:text-emerald-300 transition-colors pb-1">Novo Ativo</Link>
-              <Link href="/hub/propostas" className="text-white hover:text-emerald-300 transition-colors pb-1">Propostas CPR</Link>
-              <Link href="/hub/vitrine" className="text-white hover:text-emerald-300 transition-colors pb-1">Vitrine de Insumos</Link>
-            </div>
-            <h1 className="text-3xl font-serif font-bold mb-2">Meus Ativos (RWA & CPRs)</h1>
+        <div className="relative z-10">
+          <h1 className="text-3xl font-serif font-bold mb-2">Meus Ativos (RWA & CPRs)</h1>
             <p className="text-emerald-100/80 text-sm max-w-md">
               Gerencie seus ativos físicos registrados e suas Cédulas (NFTs) emitidas na blockchain.
             </p>
@@ -210,9 +182,9 @@ export default function MeusAtivosPage() {
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-3">Autenticação Necessária</h2>
             <p className="text-gray-500 mb-8 max-w-md mx-auto">Para visualizar seus ativos rurais, você precisa estar com a sua carteira conectada.</p>
-            <Link href="/cadastro" className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-xl transition-all">
+            <a href="/cadastro" className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-xl transition-all">
               Ir para o Login Web3
-            </Link>
+            </a>
           </div>
         ) : (
           <div className="space-y-12">
@@ -371,6 +343,5 @@ export default function MeusAtivosPage() {
           </div>
         )}
       </div>
-    </div>
   );
 }

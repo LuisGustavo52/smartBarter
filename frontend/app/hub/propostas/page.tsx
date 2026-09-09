@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useActiveAccount, useReadContract } from "thirdweb/react";
-import { getContract, prepareContractCall, sendTransaction, prepareEvent, getContractEvents, readContract, parseEventLogs } from "thirdweb";
+import { getContract, prepareContractCall, sendTransaction, readContract } from "thirdweb";
 import { smartBarterLocalChain } from "@/lib/smartBarterChain";
 import { createThirdwebClient } from "thirdweb";
-import Link from "next/link";
 import BotaoConfirmarInsumo from "@/components/BotaoConfirmarInsumo";
+import { fetchRawEvents } from "@/lib/blockchain-queries";
 
 // Inicializa o cliente Thirdweb
 const client = createThirdwebClient({
@@ -96,33 +96,11 @@ export default function PropostasPage() {
     async function fetchPropostasProdutor() {
       if (!account?.address) return;
       setIsPendingProdutor(true);
-
       try {
-        const event = prepareEvent({
-          signature: "event PropostaCriada(uint256 indexed propostaId, address indexed produtor, address indexed fornecedor, uint256 sacas, string insumo)",
-        });
-
-        // 1. Buscar todos os eventos de criacao (bypassando thirdweb proxy)
-        const rawResponse = await fetch("http://127.0.0.1:8545", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "eth_getLogs",
-            params: [{
-              address: myContract.address,
-              fromBlock: "0x0",
-              toBlock: "latest"
-            }]
-          })
-        });
-        const rawData = await rawResponse.json();
-
-        const events = parseEventLogs({
-          logs: rawData.result || [],
-          events: [event],
-        });
+        const events = await fetchRawEvents(
+          myContract.address, 
+          "event PropostaCriada(uint256 indexed propostaId, address indexed produtor, address indexed fornecedor, uint256 sacas, string insumo)"
+        );
 
         // 2. Filtrar os eventos onde o produtor e a conta atual
         const meusEventos = events.filter(
@@ -172,23 +150,16 @@ export default function PropostasPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAF9] text-gray-900 font-sans selection:bg-emerald-200 selection:text-emerald-900">
-      <div className="max-w-6xl mx-auto py-12 px-6 animate-in fade-in duration-700">
+    <div className="max-w-6xl mx-auto py-12 px-6 animate-in fade-in duration-700">
+      
+      {/* Banner Superior */}
+      <div className="bg-[#0A1A14] text-white rounded-3xl p-8 mb-10 shadow-xl relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+          <svg className="w-48 h-48" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        </div>
         
-        {/* Banner Superior */}
-        <div className="bg-[#0A1A14] text-white rounded-3xl p-8 mb-10 shadow-xl relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-            <svg className="w-48 h-48" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-          </div>
-          
-          <div className="relative z-10">
-            <div className="flex gap-6 mb-4">
-              <Link href="/hub/meus-ativos" className="text-white hover:text-emerald-300 transition-colors pb-1">Meus Ativos</Link>
-              <Link href="/hub/novo-ativo" className="text-white hover:text-emerald-300 transition-colors pb-1">Novo Ativo</Link>
-              <Link href="/hub/propostas" className="text-emerald-400 font-bold border-b-2 border-emerald-400 pb-1">Propostas CPR</Link>
-              <Link href="/hub/vitrine" className="text-white hover:text-emerald-300 transition-colors pb-1">Vitrine de Insumos</Link>
-            </div>
-            <h1 className="text-3xl font-serif font-bold mb-2">Painel de Propostas</h1>
+        <div className="relative z-10">
+          <h1 className="text-3xl font-serif font-bold mb-2">Painel de Propostas</h1>
             <p className="text-emerald-100/80 text-sm max-w-md">
               Visualize suas propostas pendentes e confirme o recebimento de insumos para emitir a CPR.
             </p>
@@ -221,9 +192,9 @@ export default function PropostasPage() {
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-3">Autenticação Necessária</h2>
             <p className="text-gray-500 mb-8 max-w-md mx-auto">Conecte sua carteira para ver propostas.</p>
-            <Link href="/cadastro" className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-xl transition-all">
+            <a href="/cadastro" className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-xl transition-all">
               Ir para o Login Web3
-            </Link>
+            </a>
           </div>
         ) : (
           <div className="space-y-12">
@@ -320,6 +291,5 @@ export default function PropostasPage() {
           </div>
         )}
       </div>
-    </div>
   );
 }

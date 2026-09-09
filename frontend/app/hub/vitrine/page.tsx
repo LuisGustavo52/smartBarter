@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useActiveAccount } from "thirdweb/react";
-import Link from "next/link";
 import BotaoAssinarAcordo from "@/components/BotaoAssinarAcordo";
 
 export default function VitrinePage() {
@@ -32,23 +31,16 @@ export default function VitrinePage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#F8FAF9] text-gray-900 font-sans selection:bg-emerald-200 selection:text-emerald-900">
-      <div className="max-w-6xl mx-auto py-12 px-6 animate-in fade-in duration-700">
+    <div className="max-w-6xl mx-auto py-12 px-6 animate-in fade-in duration-700">
+      
+      {/* Banner Superior */}
+      <div className="bg-[#0A1A14] text-white rounded-3xl p-8 mb-10 shadow-xl relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+          <svg className="w-48 h-48" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        </div>
         
-        {/* Banner Superior */}
-        <div className="bg-[#0A1A14] text-white rounded-3xl p-8 mb-10 shadow-xl relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-            <svg className="w-48 h-48" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-          </div>
-          
-          <div className="relative z-10">
-            <div className="flex flex-wrap gap-6 mb-4">
-              <Link href="/hub/meus-ativos" className="text-white hover:text-emerald-300 transition-colors pb-1">Meus Ativos</Link>
-              <Link href="/hub/novo-ativo" className="text-white hover:text-emerald-300 transition-colors pb-1">Novo Ativo</Link>
-              <Link href="/hub/propostas" className="text-white hover:text-emerald-300 transition-colors pb-1">Propostas CPR</Link>
-              <Link href="/hub/vitrine" className="text-emerald-400 font-bold border-b-2 border-emerald-400 pb-1">Vitrine de Insumos</Link>
-            </div>
-            <h1 className="text-3xl font-serif font-bold mb-2">Vitrine de Insumos</h1>
+        <div className="relative z-10">
+          <h1 className="text-3xl font-serif font-bold mb-2">Vitrine de Insumos</h1>
             <p className="text-emerald-100/80 text-sm max-w-md">
               Navegue pelos produtos cadastrados pelos fornecedores e proponha trocas através da blockchain.
             </p>
@@ -81,9 +73,9 @@ export default function VitrinePage() {
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-3">Autenticação Necessária</h2>
             <p className="text-gray-500 mb-8 max-w-md mx-auto">Conecte sua carteira para ver a vitrine de insumos.</p>
-            <Link href="/cadastro" className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-xl transition-all">
+            <a href="/cadastro" className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-xl transition-all">
               Ir para o Login Web3
-            </Link>
+            </a>
           </div>
         ) : (
           <div>
@@ -151,6 +143,5 @@ export default function VitrinePage() {
           </div>
         )}
       </div>
-    </div>
   );
 }
