@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Param } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, Query } from '@nestjs/common';
 import { AssetsService } from './assets.service';
 import { CreateAssetDto } from './dto/create-asset.dto';
 
@@ -9,6 +9,11 @@ export class AssetsController {
   @Post()
   async create(@Body() createAssetDto: CreateAssetDto) {
     return await this.assetsService.createAsset(createAssetDto);
+  }
+
+  @Get()
+  async getAssets(@Query('tipo_ativo') tipoAtivo?: string) {
+    return await this.assetsService.getAssets(tipoAtivo);
   }
 
   @Get('wallet/:address')

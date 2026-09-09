@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import BotaoAssinarAcordo from "@/components/BotaoAssinarAcordo";
 import BotaoLiquidarCPR from "@/components/BotaoLiquidarCPR";
-import Link from "next/link";
-import { getContract, prepareEvent, readContract, createThirdwebClient, parseEventLogs } from "thirdweb";
+import { getContract, prepareEvent, readContract, createThirdwebClient } from "thirdweb";
 import { smartBarterLocalChain } from "@/lib/smartBarterChain";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import { fetchRawEvents } from "@/lib/blockchain-queries";
 
 // Inicializa o cliente Thirdweb
 const client = createThirdwebClient({
@@ -42,6 +43,25 @@ export default function MeusAtivosPage() {
   const [isPendingCprs, setIsPendingCprs] = useState(false);
   const [refreshCounter, setRefreshCounter] = useState(0);
 
+  // --- MARKET DATA STATE ---
+  const [marketData, setMarketData] = useState<any>(null);
+  const [marketError, setMarketError] = useState("");
+
+  // Busca dados de mercado
+  useEffect(() => {
+    async function fetchMarket() {
+      try {
+        const res = await fetch("http://localhost:3001/market/cafe");
+        if (!res.ok) throw new Error("Cotação indisponível");
+        const data = await res.json();
+        setMarketData(data);
+      } catch (err: any) {
+        setMarketError(err.message);
+      }
+    }
+    fetchMarket();
+  }, []);
+
   // Busca ativos OFF-CHAIN (NestJS)
   useEffect(() => {
     async function fetchAtivos() {
@@ -72,31 +92,10 @@ export default function MeusAtivosPage() {
       setIsPendingCprs(true);
 
       try {
-        const event = prepareEvent({
-          signature: "event CPREmitida(uint256 indexed tokenId, address indexed fornecedor, uint256 sacas, string insumo)",
-        });
-
-        // 1. Buscar todos os eventos de criacao (bypassando thirdweb proxy)
-        const rawResponse = await fetch("http://127.0.0.1:8545", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            method: "eth_getLogs",
-            params: [{
-              address: myContract.address,
-              fromBlock: "0x0",
-              toBlock: "latest"
-            }]
-          })
-        });
-        const rawData = await rawResponse.json();
-
-        const events = parseEventLogs({
-          logs: rawData.result || [],
-          events: [event],
-        });
+        const events = await fetchRawEvents(
+          myContract.address, 
+          "event CPREmitida(uint256 indexed tokenId, address indexed fornecedor, uint256 sacas, string insumo)"
+        );
 
         const meusEventos = events.filter(
           (e: any) => e.args.fornecedor?.toLowerCase() === account.address.toLowerCase()
@@ -141,22 +140,16 @@ export default function MeusAtivosPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAF9] text-gray-900 font-sans selection:bg-emerald-200 selection:text-emerald-900">
-      <div className="max-w-6xl mx-auto py-12 px-6 animate-in fade-in duration-700">
+    <div className="max-w-6xl mx-auto py-12 px-6 animate-in fade-in duration-700">
+      
+      {/* Banner Superior */}
+      <div className="bg-[#0A1A14] text-white rounded-3xl p-8 mb-10 shadow-xl relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+          <svg className="w-48 h-48" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        </div>
         
-        {/* Banner Superior */}
-        <div className="bg-[#0A1A14] text-white rounded-3xl p-8 mb-10 shadow-xl relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-6">
-          <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-            <svg className="w-48 h-48" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-          </div>
-          
-          <div className="relative z-10">
-            <div className="flex gap-6 mb-4">
-              <Link href="/hub/meus-ativos" className="text-emerald-400 font-bold border-b-2 border-emerald-400 pb-1">Meus Ativos</Link>
-              <Link href="/hub/novo-ativo" className="text-white hover:text-emerald-300 transition-colors pb-1">Novo Ativo</Link>
-              <Link href="/hub/propostas" className="text-white hover:text-emerald-300 transition-colors pb-1">Propostas CPR</Link>
-            </div>
-            <h1 className="text-3xl font-serif font-bold mb-2">Meus Ativos (RWA & CPRs)</h1>
+        <div className="relative z-10">
+          <h1 className="text-3xl font-serif font-bold mb-2">Meus Ativos (RWA & CPRs)</h1>
             <p className="text-emerald-100/80 text-sm max-w-md">
               Gerencie seus ativos físicos registrados e suas Cédulas (NFTs) emitidas na blockchain.
             </p>
@@ -189,9 +182,9 @@ export default function MeusAtivosPage() {
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-3">Autenticação Necessária</h2>
             <p className="text-gray-500 mb-8 max-w-md mx-auto">Para visualizar seus ativos rurais, você precisa estar com a sua carteira conectada.</p>
-            <Link href="/cadastro" className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-xl transition-all">
+            <a href="/cadastro" className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-xl transition-all">
               Ir para o Login Web3
-            </Link>
+            </a>
           </div>
         ) : (
           <div className="space-y-12">
@@ -295,13 +288,50 @@ export default function MeusAtivosPage() {
                         <h3 className="text-2xl font-bold text-gray-900 mb-1">{cpr.insumo}</h3>
                         <p className="text-emerald-700 font-bold text-lg mb-4">{cpr.sacas.toString()} Sacas Garantidas</p>
                         
-                        <div className="bg-gray-50 rounded-xl p-3 inline-flex items-center gap-2 border border-gray-100">
+                        <div className="bg-gray-50 rounded-xl p-3 inline-flex items-center gap-2 border border-gray-100 mb-6">
                           <span className="text-xs text-gray-500 font-bold uppercase">Emitente (Produtor):</span>
                           <span className="font-mono text-sm text-gray-700">{cpr.produtor}</span>
                         </div>
+
+                        {/* Gráfico de Mercado */}
+                        <div className="w-full bg-gray-50 rounded-2xl p-5 border border-gray-100 mt-2">
+                          <div className="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-2">
+                            <h4 className="text-sm font-bold text-gray-700 uppercase">Cotação do Café (KC=F)</h4>
+                            {marketData && (
+                              <span className="text-emerald-800 font-bold bg-emerald-100/80 border border-emerald-200 px-3 py-1 rounded-lg text-sm text-center">
+                                Valor de Liquidação Estimado Hoje: US$ {(marketData.precoAtualUsdSaca * Number(cpr.sacas)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                              </span>
+                            )}
+                          </div>
+                          
+                          {marketError ? (
+                            <div className="h-32 flex items-center justify-center text-sm text-gray-400 italic bg-gray-100/50 rounded-xl border border-dashed border-gray-300">
+                              Cotação indisponível no momento
+                            </div>
+                          ) : !marketData ? (
+                            <div className="h-32 flex items-center justify-center bg-gray-100/50 rounded-xl">
+                              <div className="w-6 h-6 border-2 border-emerald-100 border-t-emerald-600 rounded-full animate-spin"></div>
+                            </div>
+                          ) : (
+                            <div className="h-32 w-full bg-white rounded-xl border border-gray-100 pt-2 shadow-sm">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={marketData.historico}>
+                                  <XAxis dataKey="data" hide />
+                                  <YAxis domain={['auto', 'auto']} hide />
+                                  <Tooltip 
+                                    formatter={(value: any) => [`US$ ${Number(value).toFixed(2)}`, 'Preço/Saca']}
+                                    labelFormatter={(label) => `Data: ${label}`}
+                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                  />
+                                  <Line type="monotone" dataKey="precoUsdSaca" stroke="#10b981" strokeWidth={3} dot={false} activeDot={{ r: 6 }} />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </div>
+                          )}
+                        </div>
                       </div>
                       
-                      <div className="w-full md:w-auto flex justify-end">
+                      <div className="w-full flex justify-end mt-4 md:mt-0 md:pl-6 border-t md:border-t-0 md:border-l border-gray-100 pt-6 md:pt-0">
                         <BotaoLiquidarCPR contract={myContract} tokenId={cpr.id} onSuccess={handleSuccess} />
                       </div>
                     </div>
@@ -313,6 +343,5 @@ export default function MeusAtivosPage() {
           </div>
         )}
       </div>
-    </div>
   );
 }
