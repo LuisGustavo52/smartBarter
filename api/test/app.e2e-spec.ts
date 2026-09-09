@@ -6,10 +6,14 @@ import { AppModule } from './../src/app.module';
 import { SupabaseService } from '../src/supabase/supabase.service';
 
 // Fazemos mock do thirdweb/auth para simular os retornos da verificação SIWE
-jest.mock('thirdweb/auth', () => ({
-  verifyLoginPayload: jest.fn(),
-}));
-import { verifyLoginPayload } from 'thirdweb/auth';
+const mockVerifyPayload = jest.fn();
+jest.mock('thirdweb/auth', () => {
+  return {
+    createAuth: () => ({
+      verifyPayload: (...args: any[]) => mockVerifyPayload(...args),
+    }),
+  };
+});
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
@@ -68,7 +72,7 @@ describe('AppController (e2e)', () => {
 
   it('a) assinatura valida para o endereco informado -> usuario e cadastrado normalmente', async () => {
     // Configura o mock do Thirdweb para retornar válido
-    (verifyLoginPayload as jest.Mock).mockResolvedValueOnce({
+    (mockVerifyPayload as jest.Mock).mockResolvedValueOnce({
       valid: true,
       payload: validPayload,
     });
@@ -84,13 +88,13 @@ describe('AppController (e2e)', () => {
       .expect(201);
 
     expect(response.body).toHaveProperty('id', 'uuid-123');
-    expect(verifyLoginPayload).toHaveBeenCalledTimes(1);
+    expect(mockVerifyPayload).toHaveBeenCalledTimes(1);
     expect(mockSupabaseClient.insert).toHaveBeenCalledTimes(1);
   });
 
   it('b) assinatura invalida ou de outro endereco -> requisicao rejeitada, nada e gravado no Supabase', async () => {
     // Cenário 1: Assinatura totalmente inválida
-    (verifyLoginPayload as jest.Mock).mockResolvedValueOnce({
+    (mockVerifyPayload as jest.Mock).mockResolvedValueOnce({
       valid: false,
     });
 
@@ -100,7 +104,7 @@ describe('AppController (e2e)', () => {
       .expect(401);
 
     // Cenário 2: Assinatura válida, mas o payload é de OUTRA carteira
-    (verifyLoginPayload as jest.Mock).mockResolvedValueOnce({
+    (mockVerifyPayload as jest.Mock).mockResolvedValueOnce({
       valid: true,
       payload: { ...validPayload, address: '0x9999999999999999999999999999999999999999' },
     });
@@ -116,7 +120,7 @@ describe('AppController (e2e)', () => {
 
   it('c) tentativa de reutilizar uma assinatura ja usada antiga (replay) -> deve ser rejeitada', async () => {
     // A biblioteca thirdweb throws Error ou retorna valid: false se o payload expirou/nonce já usado
-    (verifyLoginPayload as jest.Mock).mockRejectedValueOnce(new Error('Payload expired or nonce reused'));
+    (mockVerifyPayload as jest.Mock).mockRejectedValueOnce(new Error('Payload expired or nonce reused'));
 
     await request(app.getHttpServer())
       .post('/users/register')
@@ -127,7 +131,7 @@ describe('AppController (e2e)', () => {
   });
 
   it('d) o teste existente de "nao permitir carteiras duplicadas" continua passando', async () => {
-    (verifyLoginPayload as jest.Mock).mockResolvedValueOnce({
+    (mockVerifyPayload as jest.Mock).mockResolvedValueOnce({
       valid: true,
       payload: validPayload,
     });

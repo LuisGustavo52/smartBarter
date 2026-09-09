@@ -18,6 +18,7 @@ contract SmartBarterCPR is ERC721 {
         string insumo;
         bool ativa;
         bool pendente;
+        bool insumoConfirmado;
     }
 
     mapping(uint256 => Proposta) public propostas;
@@ -25,6 +26,7 @@ contract SmartBarterCPR is ERC721 {
     event PropostaCriada(uint256 indexed propostaId, address indexed produtor, address indexed fornecedor, uint256 sacas, string insumo);
     event PropostaAceita(uint256 indexed propostaId);
     event PropostaRecusada(uint256 indexed propostaId);
+    event InsumoConfirmado(uint256 indexed propostaId);
     event CPREmitida(uint256 indexed tokenId, address indexed fornecedor, uint256 sacas, string insumo);
     event CPRLiquidada(uint256 indexed tokenId);
 
@@ -42,7 +44,8 @@ contract SmartBarterCPR is ERC721 {
             sacas: _sacas,
             insumo: _insumo,
             ativa: false,
-            pendente: true
+            pendente: true,
+            insumoConfirmado: false
         });
 
         emit PropostaCriada(propostaId, msg.sender, _fornecedor, _sacas, _insumo);
@@ -56,9 +59,19 @@ contract SmartBarterCPR is ERC721 {
         p.pendente = false;
         p.ativa = true;
 
-        _mint(msg.sender, _propostaId);
-
         emit PropostaAceita(_propostaId);
+    }
+
+    function confirmarRecebimentoInsumo(uint256 _propostaId) external {
+        Proposta storage p = propostas[_propostaId];
+        require(msg.sender == p.produtor, "Somente o produtor pode confirmar");
+        require(p.ativa, "Proposta nao esta ativa/aceita");
+        require(!p.insumoConfirmado, "Insumo ja confirmado");
+
+        p.insumoConfirmado = true;
+        _mint(p.fornecedor, _propostaId);
+        
+        emit InsumoConfirmado(_propostaId);
         emit CPREmitida(_propostaId, p.fornecedor, p.sacas, p.insumo);
     }
 
@@ -81,5 +94,26 @@ contract SmartBarterCPR is ERC721 {
         _burn(_tokenId);
 
         emit CPRLiquidada(_tokenId);
+    }
+
+    function getPropostasPendentesPorFornecedor(address _fornecedor)
+        external view returns (uint256[] memory ids, Proposta[] memory pendentes) {
+        uint256 count = 0;
+        for (uint256 i = 0; i < _nextPropostaId; i++) {
+            if (propostas[i].fornecedor == _fornecedor && propostas[i].pendente) {
+                count++;
+            }
+        }
+        ids = new uint256[](count);
+        pendentes = new Proposta[](count);
+        uint256 index = 0;
+        for (uint256 i = 0; i < _nextPropostaId; i++) {
+            if (propostas[i].fornecedor == _fornecedor && propostas[i].pendente) {
+                ids[index] = i;
+                pendentes[index] = propostas[i];
+                index++;
+            }
+        }
+        return (ids, pendentes);
     }
 }
