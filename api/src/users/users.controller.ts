@@ -1,6 +1,7 @@
-import { Controller, Post, Body, Get, Param } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, Patch } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Controller('users')
 export class UsersController {
@@ -23,5 +24,20 @@ export class UsersController {
   @Get()
   async getAll() {
     return await this.usersService.findAll();
+  }
+
+  // Rota para checar se username está disponível
+  @Get('username/:username/available')
+  async checkUsername(@Param('username') username: string) {
+    return await this.usersService.checkUsernameAvailable(username);
+  }
+
+  // Rota para atualizar usuário (ex: username, nome da empresa)
+  @Patch('wallet/:address')
+  async updateWallet(
+    @Param('address') address: string,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
+    return await this.usersService.updateUser(address, updateUserDto);
   }
 }

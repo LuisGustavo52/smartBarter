@@ -18,6 +18,7 @@ export default function HubNav() {
       <Link href="/hub/novo-ativo" className={getLinkClass("/hub/novo-ativo")}>Novo Ativo</Link>
       <Link href="/hub/propostas" className={getLinkClass("/hub/propostas")}>Propostas CPR</Link>
       <Link href="/hub/vitrine" className={getLinkClass("/hub/vitrine")}>Vitrine de Insumos</Link>
+      <Link href="/hub/perfil" className={getLinkClass("/hub/perfil")}>Meu Perfil</Link>
     </nav>
   );
 }

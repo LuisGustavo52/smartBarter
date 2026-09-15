@@ -6,6 +6,7 @@ import { smartBarterLocalChain } from "@/lib/smartBarterChain";
 import { createThirdwebClient } from "thirdweb";
 import { createAuth, signLoginPayload } from "thirdweb/auth";
 import { useRouter } from "next/navigation";
+import UsuarioDisplay from "@/components/UsuarioDisplay";
 
 // Configuração do Cliente Thirdweb v5
 const client = createThirdwebClient({
@@ -163,7 +164,9 @@ function CadastroFlow() {
             
             <div className="mt-8 pt-6 border-t border-emerald-800/50">
               <p className="text-emerald-500/70 text-xs font-bold uppercase mb-1">Endereço Público</p>
-              <p className="font-mono text-emerald-100 text-sm">{account.address}</p>
+              <p className="font-mono text-emerald-100 text-sm">
+                <UsuarioDisplay address={account.address} showIcon={false} />
+              </p>
             </div>
 
             <div className="mt-6">

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import BotaoAssinarAcordo from "@/components/BotaoAssinarAcordo";
+import UsuarioDisplay from "@/components/UsuarioDisplay";
 
 export default function VitrinePage() {
   const account = useActiveAccount();
@@ -53,7 +54,7 @@ export default function VitrinePage() {
                 <div className="inline-flex items-center gap-3 bg-white/10 backdrop-blur-md border border-white/20 px-5 py-3 rounded-2xl">
                   <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.8)]"></div>
                   <span className="font-mono text-sm text-white tracking-wider">
-                    {account.address.slice(0, 6)}...{account.address.slice(-4)}
+                    <UsuarioDisplay address={account.address} showIcon={false} />
                   </span>
                 </div>
               </>
@@ -108,7 +109,7 @@ export default function VitrinePage() {
                           <span>{insumo.dono_tipo_usuario} — {insumo.dono_nome_propriedade_ou_empresa}</span>
                         </div>
                         <span className="text-xs font-mono text-gray-400 bg-gray-50 px-2 py-1 rounded-lg border border-gray-100">
-                          {insumo.dono_wallet.slice(0, 6)}...{insumo.dono_wallet.slice(-4)}
+                          <UsuarioDisplay address={insumo.dono_wallet} showIcon={false} />
                         </span>
                       </div>
                       

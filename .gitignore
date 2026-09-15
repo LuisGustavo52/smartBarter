@@ -1,5 +1,8 @@
 # Node modules
 /node_modules
+test-viem-old/
+backend/ignition/deployments/
+test-viem.mjs
 
 # Compilation output
 /dist

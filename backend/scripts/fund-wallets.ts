@@ -6,7 +6,7 @@ async function main() {
   const testClients = await viem.getWalletClients();
   const funder = testClients[0]; // Tem 10.000 ETH no hardhat node
   
-  const produtor = "0x009805DBE4F5BeeC5a154C0Ce2B7df1695aa5b2a"; // Fazenda Ouvidor
+  const produtor = "0xe65A778F7eB4943662f51ee3A8bDDe06678805D0"; // Fazenda Ouvidor
   const fornecedor1 = "0x6c3E116F3C4F6F308ba124c51C91c29D7a784103"; // Rep. Bayer
   const fornecedor2 = "0xa7dA2AC872Ea65f2db408a0a9Cadf04206E39001"; // Account 2
 
