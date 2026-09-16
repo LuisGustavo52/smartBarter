@@ -5,6 +5,7 @@ import { useActiveAccount } from "thirdweb/react";
 import { createThirdwebClient } from "thirdweb";
 import { createAuth, signLoginPayload } from "thirdweb/auth";
 import { toast, Toaster } from "react-hot-toast";
+import { invalidateUserCache } from "@/components/UsuarioDisplay";
 
 const client = createThirdwebClient({
   clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "d3690d56bdafa6a3cd84d948259dbbe0",
@@ -127,6 +128,9 @@ export default function PerfilPage() {
         nome_propriedade_ou_empresa: nomePropriedade
       });
       setUsernameStatus("idle");
+
+      // Invalida o cache global do UsuarioDisplay para atualizar os badges em todas as telas
+      invalidateUserCache(account.address);
 
     } catch (err: any) {
       console.error(err);

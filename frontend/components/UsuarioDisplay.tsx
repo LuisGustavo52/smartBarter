@@ -6,6 +6,17 @@ import { truncateAddress } from "@/app/lib/web3/format";
 // Cache global em memória para evitar chamadas duplicadas para o mesmo endereço
 const userCache = new Map<string, Promise<any>>();
 
+export function invalidateUserCache(address?: string) {
+  if (address) {
+    userCache.delete(address.toLowerCase());
+  } else {
+    userCache.clear();
+  }
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("userCacheInvalidated", { detail: { address } }));
+  }
+}
+
 export function fetchUserByWallet(address: string) {
   if (!address) return Promise.resolve(null);
   
@@ -41,20 +52,42 @@ export default function UsuarioDisplay({ address, className = "", showIcon = tru
 
   useEffect(() => {
     let mounted = true;
-    setLoading(true);
 
-    fetchUserByWallet(address).then((data) => {
-      if (!mounted) return;
-      if (data?.exists && data.user?.username) {
-        setUsername(data.user.username);
-      } else {
-        setUsername(null);
+    const loadUser = () => {
+      if (!address) {
+        setLoading(false);
+        return;
       }
-      setLoading(false);
-    });
+      setLoading(true);
+      fetchUserByWallet(address).then((data) => {
+        if (!mounted) return;
+        if (data?.exists && data.user?.username) {
+          setUsername(data.user.username);
+        } else {
+          setUsername(null);
+        }
+        setLoading(false);
+      });
+    };
+
+    loadUser();
+
+    const handleInvalidation = (e: Event) => {
+      const customEv = e as CustomEvent;
+      if (!customEv.detail?.address || customEv.detail.address.toLowerCase() === address.toLowerCase()) {
+        loadUser();
+      }
+    };
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("userCacheInvalidated", handleInvalidation);
+    }
 
     return () => {
       mounted = false;
+      if (typeof window !== "undefined") {
+        window.removeEventListener("userCacheInvalidated", handleInvalidation);
+      }
     };
   }, [address]);
 
