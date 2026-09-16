@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, ConflictException, InternalServerErrorException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { SupabaseService } from '../supabase/supabase.service';
@@ -126,6 +126,26 @@ export class UsersService {
     }
 
     return { available: !data };
+  }
+
+  async findByUsername(username: string) {
+    const supabase = this.supabaseService.getClient();
+    const { data, error } = await supabase
+      .from('users')
+      .select('carteira_digital, nome_completo, tipo_usuario, nome_propriedade_ou_empresa')
+      .ilike('username', username)
+      .maybeSingle();
+
+    if (error) {
+      console.error('ERRO AO BUSCAR USERNAME:', error);
+      throw new InternalServerErrorException('Erro ao buscar usuário pelo username.');
+    }
+
+    if (!data) {
+      throw new NotFoundException('Usuário não encontrado.');
+    }
+
+    return data;
   }
 
   async updateUser(address: string, updateUserDto: UpdateUserDto) {

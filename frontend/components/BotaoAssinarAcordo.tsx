@@ -5,6 +5,7 @@ import { prepareContractCall, getContract, sendTransaction } from "thirdweb";
 import { useActiveAccount, useActiveWalletChain } from "thirdweb/react";
 import { smartBarterLocalChain } from "@/lib/smartBarterChain";
 import { createThirdwebClient } from "thirdweb";
+import { useResolveCarteira } from "@/hooks/useResolveCarteira";
 
 // 1. Inicializa o cliente Thirdweb
 const client = createThirdwebClient({
@@ -39,6 +40,7 @@ export default function BotaoAssinarAcordo({
   const [isCancelled, setIsCancelled] = useState(false);
   const [fornecedor, setFornecedor] = useState("");
   const [sacas, setSacas] = useState(quantidadeSacasOriginal.toString());
+  const resolucaoCarteira = useResolveCarteira(fornecedor);
 
   const handleAssinar = async () => {
     setIsCancelled(false);
@@ -49,9 +51,13 @@ export default function BotaoAssinarAcordo({
       return;
     }
 
-    // Validação básica do endereço
-    if (!fornecedor.startsWith("0x") || fornecedor.length !== 42) {
-      alert("Por favor, insira um endereço de fornecedor válido (formato 0x...).");
+    if (resolucaoCarteira.isResolving) {
+      alert("Aguarde a resolução do fornecedor.");
+      return;
+    }
+
+    if (!resolucaoCarteira.isReady || !resolucaoCarteira.carteira) {
+      alert("Por favor, insira um @username válido ou um endereço 0x...");
       return;
     }
 
@@ -75,7 +81,7 @@ export default function BotaoAssinarAcordo({
       const transaction = prepareContractCall({
         contract: myContract,
         method: "function proporCPR(address _fornecedor, uint256 _sacas, string memory _insumo)",
-        params: [fornecedor, qtdSacas, descricaoInsumo],
+        params: [resolucaoCarteira.carteira, qtdSacas, descricaoInsumo],
       });
 
       // 3. Execução Envolvida em Try/Catch (Bypassando o hook para evitar switchChain)
@@ -109,11 +115,20 @@ export default function BotaoAssinarAcordo({
           <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Carteira do Fornecedor</label>
           <input
             type="text"
-            placeholder="0x..."
+            placeholder="0x... ou @username"
             value={fornecedor}
             onChange={(e) => setFornecedor(e.target.value)}
             className="w-full bg-white border border-gray-200 rounded-lg px-4 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
+          <p className={`mt-2 text-xs font-medium ${
+            resolucaoCarteira.status === "resolved" || resolucaoCarteira.status === "direct"
+              ? "text-emerald-700"
+              : resolucaoCarteira.status === "invalid" || resolucaoCarteira.status === "not_found" || resolucaoCarteira.status === "error"
+                ? "text-red-600"
+                : "text-gray-500"
+          }`}>
+            {resolucaoCarteira.mensagem}
+          </p>
         </div>
         <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Qtd de Sacas</label>
@@ -129,7 +144,7 @@ export default function BotaoAssinarAcordo({
 
       <button
         onClick={handleAssinar}
-        disabled={isPending || fornecedor.length !== 42}
+        disabled={isPending || resolucaoCarteira.isResolving || !resolucaoCarteira.isReady}
         className="relative w-full overflow-hidden group bg-emerald-900 hover:bg-emerald-950 text-white font-bold py-4 px-8 rounded-2xl shadow-lg transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center min-w-[300px]"
       >
         {isPending ? (

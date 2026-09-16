@@ -32,6 +32,12 @@ export class UsersController {
     return await this.usersService.checkUsernameAvailable(username);
   }
 
+  // Rota para resolver username em carteira e dados públicos do usuário
+  @Get('username/:username')
+  async getUserByUsername(@Param('username') username: string) {
+    return await this.usersService.findByUsername(username);
+  }
+
   // Rota para atualizar usuário (ex: username, nome da empresa)
   @Patch('wallet/:address')
   async updateWallet(
