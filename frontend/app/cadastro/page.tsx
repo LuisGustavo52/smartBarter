@@ -88,7 +88,8 @@ function CadastroFlow() {
     try {
       // 1. Gera Payload e Solicita Assinatura (SIWE) do Usuário
       const payload = await auth.generatePayload({ address: account.address });
-      const signature = await signLoginPayload({ account, payload });
+      const signedResult = await signLoginPayload({ account, payload });
+      const signature = typeof signedResult === "string" ? signedResult : (signedResult as any)?.signature ?? String(signedResult);
 
       // 2. Envia para a API NestJS
       const response = await fetch("http://localhost:3001/users/register", {

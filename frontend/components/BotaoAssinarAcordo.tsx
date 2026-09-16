@@ -51,13 +51,15 @@ export default function BotaoAssinarAcordo({
       return;
     }
 
-    if (resolucaoCarteira.isResolving) {
-      alert("Aguarde a resolução do fornecedor.");
+    if (resolucaoCarteira.isResolving || resolucaoCarteira.status === "checking") {
+      alert("Aguarde a resolução da carteira do fornecedor.");
       return;
     }
 
-    if (!resolucaoCarteira.isReady || !resolucaoCarteira.carteira) {
-      alert("Por favor, insira um @username válido ou um endereço 0x...");
+    const enderecoResolvido = resolucaoCarteira.carteira;
+
+    if (!resolucaoCarteira.isReady || !enderecoResolvido) {
+      alert("Por favor, insira um @username válido e cadastrado ou um endereço 0x...");
       return;
     }
 
@@ -77,11 +79,11 @@ export default function BotaoAssinarAcordo({
 
     try {
       setIsPending(true);
-      // 2. Preparação da Chamada - corrigido para proporCPR
+      // 2. Preparação da Chamada - usa SEMPRE o endereço resolvido pelo hook
       const transaction = prepareContractCall({
         contract: myContract,
         method: "function proporCPR(address _fornecedor, uint256 _sacas, string memory _insumo)",
-        params: [resolucaoCarteira.carteira, qtdSacas, descricaoInsumo],
+        params: [enderecoResolvido, qtdSacas, descricaoInsumo],
       });
 
       // 3. Execução Envolvida em Try/Catch (Bypassando o hook para evitar switchChain)
@@ -90,11 +92,9 @@ export default function BotaoAssinarAcordo({
       setIsPending(false);
       setIsSuccess(true);
     } catch (err: any) {
-      // 4. Tratamento Silencioso de Erro (Rejeição da MetaMask ou Chain Switch)
-      console.warn("Transação cancelada pelo usuário ou falha de rede:", err);
+      console.error("Erro na transação blockchain:", err);
       setIsPending(false);
       setIsError(true);
-      setIsCancelled(true);
     }
   };
 
@@ -144,7 +144,14 @@ export default function BotaoAssinarAcordo({
 
       <button
         onClick={handleAssinar}
-        disabled={isPending || resolucaoCarteira.isResolving || !resolucaoCarteira.isReady}
+        disabled={
+          isPending ||
+          resolucaoCarteira.isResolving ||
+          resolucaoCarteira.status === "checking" ||
+          resolucaoCarteira.status === "not_found" ||
+          !resolucaoCarteira.isReady ||
+          !resolucaoCarteira.carteira
+        }
         className="relative w-full overflow-hidden group bg-emerald-900 hover:bg-emerald-950 text-white font-bold py-4 px-8 rounded-2xl shadow-lg transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center min-w-[300px]"
       >
         {isPending ? (

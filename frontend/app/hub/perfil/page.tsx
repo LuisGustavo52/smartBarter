@@ -96,7 +96,8 @@ export default function PerfilPage() {
     try {
       // 1. Gera Payload e Solicita Assinatura (SIWE)
       const payload = await auth.generatePayload({ address: account.address });
-      const signature = await signLoginPayload({ account, payload });
+      const signedResult = await signLoginPayload({ account, payload });
+      const signature = typeof signedResult === "string" ? signedResult : (signedResult as any)?.signature ?? String(signedResult);
 
       toast.loading("Salvando alterações...", { id: toastId });
 
