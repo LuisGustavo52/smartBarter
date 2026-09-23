@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import { useRouter } from "next/navigation";
+import UsuarioDisplay from "@/components/UsuarioDisplay";
 
 function NovoAtivoDashboard() {
   const router = useRouter();
@@ -101,7 +102,7 @@ function NovoAtivoDashboard() {
               <div className="inline-flex items-center gap-3 bg-black/30 backdrop-blur-md border border-white/10 px-5 py-3 rounded-2xl">
                 <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.8)]"></div>
                 <span className="font-mono text-sm text-white tracking-wider">
-                  {account.address.slice(0, 6)}...{account.address.slice(-4)}
+                  <UsuarioDisplay address={account.address} showIcon={false} />
                 </span>
               </div>
             ) : (

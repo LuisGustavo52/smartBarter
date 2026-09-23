@@ -5,6 +5,7 @@ import { prepareContractCall, getContract, sendTransaction } from "thirdweb";
 import { useActiveAccount, useActiveWalletChain } from "thirdweb/react";
 import { smartBarterLocalChain } from "@/lib/smartBarterChain";
 import { createThirdwebClient } from "thirdweb";
+import { useResolveCarteira } from "@/hooks/useResolveCarteira";
 
 // 1. Inicializa o cliente Thirdweb
 const client = createThirdwebClient({
@@ -12,7 +13,7 @@ const client = createThirdwebClient({
 });
 
 // 2. Aponta para o contrato implantado (Deployed)
-const CONTRACT_ADDRESS = "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853"; 
+const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 
 const myContract = getContract({
   client,
@@ -39,6 +40,7 @@ export default function BotaoAssinarAcordo({
   const [isCancelled, setIsCancelled] = useState(false);
   const [fornecedor, setFornecedor] = useState("");
   const [sacas, setSacas] = useState(quantidadeSacasOriginal.toString());
+  const resolucaoCarteira = useResolveCarteira(fornecedor);
 
   const handleAssinar = async () => {
     setIsCancelled(false);
@@ -49,9 +51,15 @@ export default function BotaoAssinarAcordo({
       return;
     }
 
-    // Validação básica do endereço
-    if (!fornecedor.startsWith("0x") || fornecedor.length !== 42) {
-      alert("Por favor, insira um endereço de fornecedor válido (formato 0x...).");
+    if (resolucaoCarteira.isResolving || resolucaoCarteira.status === "checking") {
+      alert("Aguarde a resolução da carteira do fornecedor.");
+      return;
+    }
+
+    const enderecoResolvido = resolucaoCarteira.carteira;
+
+    if (!resolucaoCarteira.isReady || !enderecoResolvido) {
+      alert("Por favor, insira um @username válido e cadastrado ou um endereço 0x...");
       return;
     }
 
@@ -71,24 +79,43 @@ export default function BotaoAssinarAcordo({
 
     try {
       setIsPending(true);
-      // 2. Preparação da Chamada - corrigido para proporCPR
+      // 2. Preparação da Chamada - usa SEMPRE o endereço resolvido pelo hook
       const transaction = prepareContractCall({
         contract: myContract,
         method: "function proporCPR(address _fornecedor, uint256 _sacas, string memory _insumo)",
-        params: [fornecedor, qtdSacas, descricaoInsumo],
+        params: [enderecoResolvido, qtdSacas, descricaoInsumo],
       });
 
-      // 3. Execução Envolvida em Try/Catch (Bypassando o hook para evitar switchChain)
-      await sendTransaction({ transaction, account });
+      // 3. Execução Envolvida em Try/Catch
+      const res = await sendTransaction({ transaction, account });
+      if (res?.transactionHash) {
+        console.log("Transação enviada com sucesso, hash:", res.transactionHash);
+      }
       
       setIsPending(false);
       setIsSuccess(true);
     } catch (err: any) {
-      // 4. Tratamento Silencioso de Erro (Rejeição da MetaMask ou Chain Switch)
-      console.warn("Transação cancelada pelo usuário ou falha de rede:", err);
+      if (err?.transactionHash || err?.hash) {
+        console.warn("Transação transmitida com hash, ignorando erro secundário de recibo:", err);
+        setIsPending(false);
+        setIsSuccess(true);
+        return;
+      }
+
+      if (
+        err?.message?.toLowerCase().includes("user rejected") ||
+        err?.code === 4001 ||
+        err?.name === "UserRejectedRequestError"
+      ) {
+        console.warn("Transação cancelada pelo usuário na MetaMask.");
+        setIsPending(false);
+        setIsCancelled(true);
+        return;
+      }
+
+      console.error("Erro na transação blockchain:", err);
       setIsPending(false);
       setIsError(true);
-      setIsCancelled(true);
     }
   };
 
@@ -109,11 +136,20 @@ export default function BotaoAssinarAcordo({
           <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Carteira do Fornecedor</label>
           <input
             type="text"
-            placeholder="0x..."
+            placeholder="0x... ou @username"
             value={fornecedor}
             onChange={(e) => setFornecedor(e.target.value)}
             className="w-full bg-white border border-gray-200 rounded-lg px-4 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
+          <p className={`mt-2 text-xs font-medium ${
+            resolucaoCarteira.status === "resolved" || resolucaoCarteira.status === "direct"
+              ? "text-emerald-700"
+              : resolucaoCarteira.status === "invalid" || resolucaoCarteira.status === "not_found" || resolucaoCarteira.status === "error"
+                ? "text-red-600"
+                : "text-gray-500"
+          }`}>
+            {resolucaoCarteira.mensagem}
+          </p>
         </div>
         <div>
           <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Qtd de Sacas</label>
@@ -129,7 +165,14 @@ export default function BotaoAssinarAcordo({
 
       <button
         onClick={handleAssinar}
-        disabled={isPending || fornecedor.length !== 42}
+        disabled={
+          isPending ||
+          resolucaoCarteira.isResolving ||
+          resolucaoCarteira.status === "checking" ||
+          resolucaoCarteira.status === "not_found" ||
+          !resolucaoCarteira.isReady ||
+          !resolucaoCarteira.carteira
+        }
         className="relative w-full overflow-hidden group bg-emerald-900 hover:bg-emerald-950 text-white font-bold py-4 px-8 rounded-2xl shadow-lg transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center min-w-[300px]"
       >
         {isPending ? (

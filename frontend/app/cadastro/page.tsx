@@ -6,6 +6,7 @@ import { smartBarterLocalChain } from "@/lib/smartBarterChain";
 import { createThirdwebClient } from "thirdweb";
 import { createAuth, signLoginPayload } from "thirdweb/auth";
 import { useRouter } from "next/navigation";
+import UsuarioDisplay from "@/components/UsuarioDisplay";
 
 // Configuração do Cliente Thirdweb v5
 const client = createThirdwebClient({
@@ -87,7 +88,8 @@ function CadastroFlow() {
     try {
       // 1. Gera Payload e Solicita Assinatura (SIWE) do Usuário
       const payload = await auth.generatePayload({ address: account.address });
-      const signature = await signLoginPayload({ account, payload });
+      const signedResult = await signLoginPayload({ account, payload });
+      const signature = typeof signedResult === "string" ? signedResult : (signedResult as any)?.signature ?? String(signedResult);
 
       // 2. Envia para a API NestJS
       const response = await fetch("http://localhost:3001/users/register", {
@@ -163,7 +165,9 @@ function CadastroFlow() {
             
             <div className="mt-8 pt-6 border-t border-emerald-800/50">
               <p className="text-emerald-500/70 text-xs font-bold uppercase mb-1">Endereço Público</p>
-              <p className="font-mono text-emerald-100 text-sm">{account.address}</p>
+              <p className="font-mono text-emerald-100 text-sm">
+                <UsuarioDisplay address={account.address} showIcon={false} />
+              </p>
             </div>
 
             <div className="mt-6">

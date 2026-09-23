@@ -8,13 +8,14 @@ import { getContract, prepareEvent, readContract, createThirdwebClient } from "t
 import { smartBarterLocalChain } from "@/lib/smartBarterChain";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { fetchRawEvents } from "@/lib/blockchain-queries";
+import UsuarioDisplay from "@/components/UsuarioDisplay";
 
 // Inicializa o cliente Thirdweb
 const client = createThirdwebClient({
   clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "d3690d56bdafa6a3cd84d948259dbbe0",
 });
 
-const CONTRACT_ADDRESS = "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853"; 
+const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3"; 
 
 const myContract = getContract({
   client,
@@ -162,7 +163,7 @@ export default function MeusAtivosPage() {
                 <div className="inline-flex items-center gap-3 bg-white/10 backdrop-blur-md border border-white/20 px-5 py-3 rounded-2xl">
                   <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.8)]"></div>
                   <span className="font-mono text-sm text-white tracking-wider">
-                    {account.address.slice(0, 6)}...{account.address.slice(-4)}
+                    <UsuarioDisplay address={account.address} showIcon={false} />
                   </span>
                 </div>
               </>
@@ -290,7 +291,9 @@ export default function MeusAtivosPage() {
                         
                         <div className="bg-gray-50 rounded-xl p-3 inline-flex items-center gap-2 border border-gray-100 mb-6">
                           <span className="text-xs text-gray-500 font-bold uppercase">Emitente (Produtor):</span>
-                          <span className="font-mono text-sm text-gray-700">{cpr.produtor}</span>
+                          <span className="font-mono text-sm text-gray-700">
+                            <UsuarioDisplay address={cpr.produtor} showIcon={false} />
+                          </span>
                         </div>
 
                         {/* Gráfico de Mercado */}
