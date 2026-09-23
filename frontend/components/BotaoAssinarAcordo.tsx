@@ -13,7 +13,7 @@ const client = createThirdwebClient({
 });
 
 // 2. Aponta para o contrato implantado (Deployed)
-const CONTRACT_ADDRESS = "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9";
+const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 
 const myContract = getContract({
   client,
@@ -86,12 +86,33 @@ export default function BotaoAssinarAcordo({
         params: [enderecoResolvido, qtdSacas, descricaoInsumo],
       });
 
-      // 3. Execução Envolvida em Try/Catch (Bypassando o hook para evitar switchChain)
-      await sendTransaction({ transaction, account });
+      // 3. Execução Envolvida em Try/Catch
+      const res = await sendTransaction({ transaction, account });
+      if (res?.transactionHash) {
+        console.log("Transação enviada com sucesso, hash:", res.transactionHash);
+      }
       
       setIsPending(false);
       setIsSuccess(true);
     } catch (err: any) {
+      if (err?.transactionHash || err?.hash) {
+        console.warn("Transação transmitida com hash, ignorando erro secundário de recibo:", err);
+        setIsPending(false);
+        setIsSuccess(true);
+        return;
+      }
+
+      if (
+        err?.message?.toLowerCase().includes("user rejected") ||
+        err?.code === 4001 ||
+        err?.name === "UserRejectedRequestError"
+      ) {
+        console.warn("Transação cancelada pelo usuário na MetaMask.");
+        setIsPending(false);
+        setIsCancelled(true);
+        return;
+      }
+
       console.error("Erro na transação blockchain:", err);
       setIsPending(false);
       setIsError(true);

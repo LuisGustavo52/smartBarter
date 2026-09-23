@@ -14,7 +14,7 @@ const client = createThirdwebClient({
   clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "d3690d56bdafa6a3cd84d948259dbbe0",
 });
 
-const CONTRACT_ADDRESS = "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9";
+const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 
 const myContract = getContract({
   client,
@@ -43,11 +43,32 @@ function BotaoAceitar({ propostaId, onSuccess }: { propostaId: bigint; onSuccess
         params: [propostaId],
       });
 
-      await sendTransaction({ transaction, account });
+      const res = await sendTransaction({ transaction, account });
+      if (res?.transactionHash) {
+        console.log("Proposta aceita com sucesso, hash:", res.transactionHash);
+      }
       
       setIsPending(false);
       onSuccess();
     } catch (err: any) {
+      if (err?.transactionHash || err?.hash) {
+        console.warn("Transação transmitida com hash, ignorando erro secundário de recibo:", err);
+        setIsPending(false);
+        onSuccess();
+        return;
+      }
+
+      if (
+        err?.message?.toLowerCase().includes("user rejected") ||
+        err?.code === 4001 ||
+        err?.name === "UserRejectedRequestError"
+      ) {
+        console.warn("Transação cancelada pelo usuário na MetaMask.");
+        setIsPending(false);
+        setError("Transação cancelada pelo usuário.");
+        return;
+      }
+
       console.error(err);
       setIsPending(false);
       setError("Erro ao aceitar proposta. Tente novamente.");
