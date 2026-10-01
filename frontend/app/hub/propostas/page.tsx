@@ -8,6 +8,7 @@ import { createThirdwebClient } from "thirdweb";
 import BotaoConfirmarInsumo from "@/components/BotaoConfirmarInsumo";
 import { fetchRawEvents } from "@/lib/blockchain-queries";
 import UsuarioDisplay from "@/components/UsuarioDisplay";
+import ReputacaoEstrelas from "@/components/ReputacaoEstrelas";
 
 // Inicializa o cliente Thirdweb
 const client = createThirdwebClient({
@@ -244,11 +245,14 @@ export default function PropostasPage() {
                         <h3 className="text-xl font-bold text-gray-900 mb-1">{proposta.insumo}</h3>
                         <p className="text-indigo-700 font-semibold mb-4">{proposta.sacas.toString()} Sacas</p>
                         
-                        <div className="bg-gray-50 rounded-xl p-3 inline-flex items-center gap-2 border border-gray-100">
-                          <span className="text-xs text-gray-500 font-bold uppercase">Fornecedor:</span>
-                          <span className="font-mono text-sm text-gray-700">
-                            <UsuarioDisplay address={proposta.fornecedor} showIcon={false} />
-                          </span>
+                        <div className="bg-gray-50 rounded-xl p-3 inline-flex flex-col gap-1 border border-gray-100">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500 font-bold uppercase">Fornecedor:</span>
+                            <span className="font-mono text-sm text-gray-700">
+                              <UsuarioDisplay address={proposta.fornecedor} showIcon={false} />
+                            </span>
+                          </div>
+                          <ReputacaoEstrelas carteira={proposta.fornecedor} />
                         </div>
                       </div>
                       
@@ -292,11 +296,14 @@ export default function PropostasPage() {
                           <h3 className="text-xl font-bold text-gray-900 mb-1">{proposta.insumo}</h3>
                           <p className="text-emerald-700 font-semibold mb-4">{proposta.sacas.toString()} Sacas</p>
                           
-                          <div className="bg-gray-50 rounded-xl p-3 inline-flex items-center gap-2 border border-gray-100">
-                            <span className="text-xs text-gray-500 font-bold uppercase">Produtor:</span>
-                            <span className="font-mono text-sm text-gray-700">
-                              <UsuarioDisplay address={proposta.produtor} showIcon={false} />
-                            </span>
+                          <div className="bg-gray-50 rounded-xl p-3 inline-flex flex-col gap-1 border border-gray-100">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-500 font-bold uppercase">Produtor:</span>
+                              <span className="font-mono text-sm text-gray-700">
+                                <UsuarioDisplay address={proposta.produtor} showIcon={false} />
+                              </span>
+                            </div>
+                            <ReputacaoEstrelas carteira={proposta.produtor} />
                           </div>
                         </div>
                         

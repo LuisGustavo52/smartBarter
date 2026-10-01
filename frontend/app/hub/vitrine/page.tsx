@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import BotaoAssinarAcordo from "@/components/BotaoAssinarAcordo";
 import UsuarioDisplay from "@/components/UsuarioDisplay";
+import ReputacaoEstrelas from "@/components/ReputacaoEstrelas";
 
 export default function VitrinePage() {
   const account = useActiveAccount();
@@ -108,9 +109,12 @@ export default function VitrinePage() {
                         <div className="inline-flex items-center gap-2 bg-blue-50 text-blue-800 text-xs font-bold uppercase px-3 py-1 rounded-full">
                           <span>{insumo.dono_tipo_usuario} — {insumo.dono_nome_propriedade_ou_empresa}</span>
                         </div>
-                        <span className="text-xs font-mono text-gray-400 bg-gray-50 px-2 py-1 rounded-lg border border-gray-100">
-                          <UsuarioDisplay address={insumo.dono_wallet} showIcon={false} />
-                        </span>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-xs font-mono text-gray-400 bg-gray-50 px-2 py-1 rounded-lg border border-gray-100">
+                            <UsuarioDisplay address={insumo.dono_wallet} showIcon={false} />
+                          </span>
+                          <ReputacaoEstrelas carteira={insumo.dono_wallet} />
+                        </div>
                       </div>
                       
                       <h3 className="text-xl font-bold text-gray-900 mt-3">{insumo.descricao}</h3>
