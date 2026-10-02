@@ -113,34 +113,6 @@ function NovoAtivoDashboard() {
           </div>
         </div>
 
-        {/* Cards Estatísticos Estáticos */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white rounded-3xl p-6 border border-emerald-100 shadow-sm flex items-center gap-6">
-            <div className="w-16 h-16 rounded-2xl bg-amber-50 flex items-center justify-center">
-              <svg className="w-8 h-8 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" /></svg>
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-gray-500 mb-1">Safra Comprometida</p>
-              <div className="flex items-baseline gap-2">
-                <h3 className="text-3xl font-bold text-gray-900">24%</h3>
-                <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full">-2% vs ano passado</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-3xl p-6 border border-emerald-100 shadow-sm flex items-center gap-6">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-50 flex items-center justify-center">
-              <svg className="w-8 h-8 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-gray-500 mb-1">Cotação do Café (Saca)</p>
-              <div className="flex items-baseline gap-2">
-                <h3 className="text-3xl font-bold text-gray-900">R$ 1.150</h3>
-                <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full">+1.5% hoje</span>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* SEÇÃO INFERIOR: Formulário de Novo Ativo */}
