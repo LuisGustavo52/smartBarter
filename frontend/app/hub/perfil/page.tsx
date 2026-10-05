@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import { createThirdwebClient } from "thirdweb";
 import { createAuth, signLoginPayload } from "thirdweb/auth";
-import { toast } from "react-hot-toast";
+import { notify } from "@/lib/notify";
 import { invalidateUserCache } from "@/components/UsuarioDisplay";
 import ReputacaoEstrelas from "@/components/ReputacaoEstrelas";
 
@@ -88,12 +88,12 @@ export default function PerfilPage() {
     e.preventDefault();
     if (!account) return;
     if (usernameStatus === "taken" || usernameStatus === "invalid") {
-      toast.error("Por favor, escolha um @username válido e disponível.");
+      notify.error("Por favor, escolha um @username válido e disponível.");
       return;
     }
 
     setSaving(true);
-    const toastId = toast.loading("Solicitando assinatura segura na carteira...");
+    const toastId = notify.loading("Solicitando assinatura segura na carteira...");
 
     try {
       // 1. Gera Payload e Solicita Assinatura (SIWE)
@@ -101,7 +101,7 @@ export default function PerfilPage() {
       const signedResult = await signLoginPayload({ account, payload });
       const signature = typeof signedResult === "string" ? signedResult : (signedResult as any)?.signature ?? String(signedResult);
 
-      toast.loading("Salvando alterações...", { id: toastId });
+      notify.loading("Salvando alterações...", toastId);
 
       // 2. Atualiza via PATCH
       const res = await fetch(`http://localhost:3001/users/wallet/${account.address}`, {
@@ -116,11 +116,12 @@ export default function PerfilPage() {
       });
 
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.message || "Erro ao salvar perfil");
+        const errData = await res.json().catch(() => ({}));
+        const msg = Array.isArray(errData.message) ? errData.message.join(" ") : errData.message || "Erro ao salvar perfil";
+        throw Object.assign(new Error(msg), { userMessage: msg });
       }
 
-      toast.success("Perfil atualizado com sucesso!", { id: toastId });
+      notify.success("Perfil atualizado com sucesso!", toastId);
       
       // Atualiza o cache local
       setUserData({
@@ -134,8 +135,8 @@ export default function PerfilPage() {
       invalidateUserCache(account.address);
 
     } catch (err: any) {
-      console.error(err);
-      toast.error(err.message || "Falha ao atualizar perfil", { id: toastId });
+      console.warn("Falha ao atualizar perfil", err);
+      notify.fromError(err, toastId);
     } finally {
       setSaving(false);
     }

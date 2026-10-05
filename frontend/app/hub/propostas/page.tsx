@@ -146,7 +146,8 @@ export default function PropostasPage() {
 
         setPropostasProdutor(propostasAtivas);
       } catch (err) {
-        console.error("Erro ao buscar propostas do produtor:", err);
+        console.warn("Erro ao buscar propostas do produtor:", err);
+        notify.error("Não foi possível carregar as propostas. Verifique a conexão.", "propostas-produtor-error");
       } finally {
         setIsPendingProdutor(false);
       }

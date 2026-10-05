@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import { useRouter } from "next/navigation";
 import UsuarioDisplay from "@/components/UsuarioDisplay";
+import { notify } from "@/lib/notify";
 
 function NovoAtivoDashboard() {
   const router = useRouter();
@@ -35,7 +36,9 @@ function NovoAtivoDashboard() {
     setError("");
     setSuccess(false);
 
+    let toastId;
     try {
+      toastId = notify.loading("Cadastrando ativo...");
       const response = await fetch("http://localhost:3001/assets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -48,11 +51,13 @@ function NovoAtivoDashboard() {
       });
 
       if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.message || "Erro ao cadastrar o ativo.");
+        const errData = await response.json().catch(() => ({}));
+        const msg = Array.isArray(errData.message) ? errData.message.join(" ") : errData.message || "Erro ao cadastrar o ativo.";
+        throw Object.assign(new Error(msg), { userMessage: msg });
       }
 
       setSuccess(true);
+      notify.success("Ativo cadastrado com sucesso!", toastId);
       
       // Redireciona para a tela de ativos onde o Botão Web3 estará aguardando
       setTimeout(() => {
@@ -60,8 +65,8 @@ function NovoAtivoDashboard() {
       }, 1500);
       
     } catch (err: any) {
-      console.error("Erro no formulário de ativo:", err);
-      setError(err.message);
+      console.warn("Erro no formulário de ativo:", err);
+      notify.fromError(err, toastId);
       setLoading(false);
     } 
   };

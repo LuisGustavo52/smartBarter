@@ -9,6 +9,7 @@ import { smartBarterLocalChain } from "@/lib/smartBarterChain";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import { fetchRawEvents } from "@/lib/blockchain-queries";
 import UsuarioDisplay from "@/components/UsuarioDisplay";
+import { notify } from "@/lib/notify";
 
 // Inicializa o cliente Thirdweb
 const client = createThirdwebClient({
@@ -77,7 +78,9 @@ export default function MeusAtivosPage() {
         const data = await res.json();
         setAtivos(data);
       } catch (err: any) {
-        setError(err.message);
+        console.warn("Erro ao buscar seus ativos:", err);
+        notify.error("Não foi possível carregar os ativos. Verifique a conexão.", "ativos-offchain-error");
+        setError("Não foi possível carregar seus ativos.");
       } finally {
         setLoading(false);
       }
@@ -127,7 +130,8 @@ export default function MeusAtivosPage() {
 
         setCprsOnChain(ativas);
       } catch (err) {
-        console.error("Erro ao buscar CPRs on-chain:", err);
+        console.warn("Erro ao buscar CPRs on-chain:", err);
+        notify.error("Não foi possível carregar CPRs on-chain. Verifique a conexão.", "cprs-onchain-error");
       } finally {
         setIsPendingCprs(false);
       }

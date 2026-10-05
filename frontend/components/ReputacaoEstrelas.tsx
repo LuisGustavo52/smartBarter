@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { notify } from "@/lib/notify";
 
 interface ReputacaoData {
   carteira: string;
@@ -36,7 +37,10 @@ export default function ReputacaoEstrelas({ carteira }: ReputacaoEstrelas) {
     fetch(`http://localhost:3001/reputacao/${carteira}`)
       .then((res) => res.json())
       .then((data: ReputacaoData) => setReputacao(data))
-      .catch((err) => console.error("Erro ao buscar reputação:", err))
+      .catch((err) => {
+        console.warn("Erro ao buscar reputação:", err);
+        notify.error("Não foi possível carregar a reputação. Verifique a conexão.", "reputacao-error");
+      })
       .finally(() => setIsLoading(false));
   }, [carteira]);
 

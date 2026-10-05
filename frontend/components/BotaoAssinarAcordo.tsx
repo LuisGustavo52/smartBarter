@@ -6,7 +6,8 @@ import { useActiveAccount, useActiveWalletChain } from "thirdweb/react";
 import { smartBarterLocalChain } from "@/lib/smartBarterChain";
 import { createThirdwebClient } from "thirdweb";
 import { useResolveCarteira } from "@/hooks/useResolveCarteira";
-import { notify } from "@/lib/notify";
+import toast from "react-hot-toast";
+import { notify, isUserRejection } from "@/lib/notify";
 
 // 1. Inicializa o cliente Thirdweb
 const client = createThirdwebClient({
@@ -43,6 +44,42 @@ export default function BotaoAssinarAcordo({
   const [sacas, setSacas] = useState(quantidadeSacasOriginal.toString());
   const resolucaoCarteira = useResolveCarteira(fornecedor);
 
+  const executarProposta = async (enderecoResolvido: string, qtdSacas: bigint) => {
+    let toastId;
+    try {
+      setIsPending(true);
+      toastId = notify.loading("Enviando proposta...");
+      const transaction = prepareContractCall({
+        contract: myContract,
+        method: "function proporCPR(address _fornecedor, uint256 _sacas, string memory _insumo)",
+        params: [enderecoResolvido, qtdSacas, descricaoInsumo],
+      });
+
+      const res = await sendTransaction({ transaction, account: account! });
+      if (res?.transactionHash) {
+        console.log("Transação enviada com sucesso, hash:", res.transactionHash);
+      }
+      
+      setIsPending(false);
+      setIsSuccess(true);
+      notify.success("Proposta enviada!", toastId);
+    } catch (err: any) {
+      setIsPending(false);
+      if (err?.transactionHash || err?.hash) {
+        console.warn("Transação transmitida com hash, ignorando erro secundário de recibo:", err);
+        setIsSuccess(true);
+        notify.success("Proposta enviada!", toastId);
+        return;
+      }
+      notify.fromError(err, toastId);
+      if (isUserRejection(err)) {
+        setIsCancelled(true);
+      } else {
+        setIsError(true);
+      }
+    }
+  };
+
   const handleAssinar = async () => {
     setIsCancelled(false);
     setIsError(false);
@@ -70,45 +107,32 @@ export default function BotaoAssinarAcordo({
       return;
     }
 
-    // 1. Pop-up de Confirmação (UX Graceful)
-    const confirmar = window.confirm("Você tem certeza que deseja propor esta CPR na blockchain?");
-    if (!confirmar) {
-      console.warn("Transação abortada pelo usuário no pop-up.");
-      setIsCancelled(true);
-      return;
-    }
-
-    let toastId;
-    try {
-      setIsPending(true);
-      toastId = notify.loading("Enviando proposta...");
-      // 2. Preparação da Chamada - usa SEMPRE o endereço resolvido pelo hook
-      const transaction = prepareContractCall({
-        contract: myContract,
-        method: "function proporCPR(address _fornecedor, uint256 _sacas, string memory _insumo)",
-        params: [enderecoResolvido, qtdSacas, descricaoInsumo],
-      });
-
-      // 3. Execução Envolvida em Try/Catch
-      const res = await sendTransaction({ transaction, account });
-      if (res?.transactionHash) {
-        console.log("Transação enviada com sucesso, hash:", res.transactionHash);
-      }
-      
-      setIsPending(false);
-      setIsSuccess(true);
-      notify.success("Proposta enviada!", toastId);
-    } catch (err: any) {
-      setIsPending(false);
-      if (err?.transactionHash || err?.hash) {
-        console.warn("Transação transmitida com hash, ignorando erro secundário de recibo:", err);
-        setIsSuccess(true);
-        notify.success("Proposta enviada!", toastId);
-        return;
-      }
-      notify.fromError(err, toastId);
-      setIsError(true);
-    }
+    toast.custom((t) => (
+      <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-100 max-w-sm w-full animate-in zoom-in-95 duration-200">
+        <h3 className="font-bold text-gray-900 mb-2">Confirmar Proposta</h3>
+        <p className="text-gray-500 text-sm mb-6">Propor {qtdSacas.toString()} sacas de "{descricaoInsumo}" para {fornecedor} na blockchain?</p>
+        <div className="flex gap-3 justify-end">
+          <button 
+            onClick={() => {
+              toast.dismiss(t.id);
+              setIsCancelled(true);
+            }} 
+            className="px-4 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-50 rounded-lg transition-colors"
+          >
+            Cancelar
+          </button>
+          <button 
+            onClick={() => {
+              toast.dismiss(t.id);
+              executarProposta(enderecoResolvido, qtdSacas);
+            }} 
+            className="px-4 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors shadow-sm"
+          >
+            Confirmar
+          </button>
+        </div>
+      </div>
+    ), { id: "confirmar-proposta", duration: Infinity, position: "top-center" });
   };
 
   // --- Renderização Condicional de Status (UI/UX) ---

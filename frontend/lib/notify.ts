@@ -11,7 +11,7 @@ export function isUserRejection(err: any): boolean {
 }
 
 export const notify = {
-  loading: (msg: string) => toast.loading(msg),
+  loading: (msg: string, id?: string) => toast.loading(msg, { id }),
   success: (msg: string, id?: string) => toast.success(msg, { id }),
   error: (msg: string, id?: string) => toast.error(msg, { id }),
   fromError: (err: any, id?: string) => {
