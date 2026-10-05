@@ -9,6 +9,7 @@ import BotaoConfirmarInsumo from "@/components/BotaoConfirmarInsumo";
 import { fetchRawEvents } from "@/lib/blockchain-queries";
 import UsuarioDisplay from "@/components/UsuarioDisplay";
 import ReputacaoEstrelas from "@/components/ReputacaoEstrelas";
+import { notify } from "@/lib/notify";
 
 // Inicializa o cliente Thirdweb
 const client = createThirdwebClient({
@@ -26,17 +27,17 @@ const myContract = getContract({
 function BotaoAceitar({ propostaId, onSuccess }: { propostaId: bigint; onSuccess: () => void }) {
   const account = useActiveAccount();
   const [isPending, setIsPending] = useState(false);
-  const [error, setError] = useState("");
 
   const handleAceitar = async () => {
     if (!account) {
-      setError("Carteira não conectada.");
+      notify.error("Carteira não conectada.");
       return;
     }
 
+    let toastId;
     try {
       setIsPending(true);
-      setError("");
+      toastId = notify.loading("Aceitando proposta...");
 
       const transaction = prepareContractCall({
         contract: myContract,
@@ -50,29 +51,17 @@ function BotaoAceitar({ propostaId, onSuccess }: { propostaId: bigint; onSuccess
       }
       
       setIsPending(false);
+      notify.success("Proposta aceita com sucesso!", toastId);
       onSuccess();
     } catch (err: any) {
+      setIsPending(false);
       if (err?.transactionHash || err?.hash) {
         console.warn("Transação transmitida com hash, ignorando erro secundário de recibo:", err);
-        setIsPending(false);
+        notify.success("Proposta aceita com sucesso!", toastId);
         onSuccess();
         return;
       }
-
-      if (
-        err?.message?.toLowerCase().includes("user rejected") ||
-        err?.code === 4001 ||
-        err?.name === "UserRejectedRequestError"
-      ) {
-        console.warn("Transação cancelada pelo usuário na MetaMask.");
-        setIsPending(false);
-        setError("Transação cancelada pelo usuário.");
-        return;
-      }
-
-      console.error(err);
-      setIsPending(false);
-      setError("Erro ao aceitar proposta. Tente novamente.");
+      notify.fromError(err, toastId);
     }
   };
 
@@ -92,7 +81,6 @@ function BotaoAceitar({ propostaId, onSuccess }: { propostaId: bigint; onSuccess
           "Aceitar Proposta"
         )}
       </button>
-      {error && <span className="text-xs text-red-600 font-medium">{error}</span>}
     </div>
   );
 }

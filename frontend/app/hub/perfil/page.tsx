@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import { createThirdwebClient } from "thirdweb";
 import { createAuth, signLoginPayload } from "thirdweb/auth";
-import { toast, Toaster } from "react-hot-toast";
+import { toast } from "react-hot-toast";
 import { invalidateUserCache } from "@/components/UsuarioDisplay";
 import ReputacaoEstrelas from "@/components/ReputacaoEstrelas";
 
@@ -159,7 +159,6 @@ export default function PerfilPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
-      <Toaster position="top-right" toastOptions={{ style: { background: '#064e3b', color: '#fff' } }} />
       
       {/* Banner */}
       <div className="relative overflow-hidden bg-emerald-950 rounded-3xl p-8 border border-emerald-800/50 shadow-2xl">

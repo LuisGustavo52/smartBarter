@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import { prepareContractCall, sendTransaction } from "thirdweb";
 
+import { notify } from "@/lib/notify";
+
 export default function BotaoLiquidarCPR({
   tokenId,
   contract,
@@ -13,17 +15,17 @@ export default function BotaoLiquidarCPR({
 }) {
   const account = useActiveAccount();
   const [isPending, setIsPending] = useState(false);
-  const [error, setError] = useState("");
 
   const handleLiquidar = async () => {
     if (!account) {
-      setError("Carteira não conectada.");
+      notify.error("Carteira não conectada.");
       return;
     }
 
+    let toastId;
     try {
       setIsPending(true);
-      setError("");
+      toastId = notify.loading("Liquidando CPR...");
 
       const transaction = prepareContractCall({
         contract,
@@ -37,29 +39,17 @@ export default function BotaoLiquidarCPR({
       }
 
       setIsPending(false);
+      notify.success("CPR liquidada! O NFT foi queimado.", toastId);
       onSuccess();
     } catch (err: any) {
+      setIsPending(false);
       if (err?.transactionHash || err?.hash) {
         console.warn("Transação transmitida com hash, ignorando erro secundário de recibo:", err);
-        setIsPending(false);
+        notify.success("CPR liquidada! O NFT foi queimado.", toastId);
         onSuccess();
         return;
       }
-
-      if (
-        err?.message?.toLowerCase().includes("user rejected") ||
-        err?.code === 4001 ||
-        err?.name === "UserRejectedRequestError"
-      ) {
-        console.warn("Transação cancelada pelo usuário na MetaMask.");
-        setIsPending(false);
-        setError("Transação cancelada pelo usuário.");
-        return;
-      }
-
-      console.error(err);
-      setIsPending(false);
-      setError("Erro ao liquidar CPR. Tente novamente.");
+      notify.fromError(err, toastId);
     }
   };
 
@@ -79,7 +69,6 @@ export default function BotaoLiquidarCPR({
           "Liquidar CPR"
         )}
       </button>
-      {error && <span className="text-xs text-red-600 font-medium">{error}</span>}
     </div>
   );
 }

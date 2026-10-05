@@ -6,6 +6,7 @@ import { useActiveAccount, useActiveWalletChain } from "thirdweb/react";
 import { smartBarterLocalChain } from "@/lib/smartBarterChain";
 import { createThirdwebClient } from "thirdweb";
 import { useResolveCarteira } from "@/hooks/useResolveCarteira";
+import { notify } from "@/lib/notify";
 
 // 1. Inicializa o cliente Thirdweb
 const client = createThirdwebClient({
@@ -47,25 +48,25 @@ export default function BotaoAssinarAcordo({
     setIsError(false);
     
     if (!account) {
-      alert("Conecte sua carteira primeiro.");
+      notify.error("Conecte sua carteira primeiro.");
       return;
     }
 
     if (resolucaoCarteira.isResolving || resolucaoCarteira.status === "checking") {
-      alert("Aguarde a resolução da carteira do fornecedor.");
+      notify.error("Aguarde a resolução da carteira do fornecedor.");
       return;
     }
 
     const enderecoResolvido = resolucaoCarteira.carteira;
 
     if (!resolucaoCarteira.isReady || !enderecoResolvido) {
-      alert("Por favor, insira um @username válido e cadastrado ou um endereço 0x...");
+      notify.error("Por favor, insira um @username válido e cadastrado ou um endereço 0x...");
       return;
     }
 
     const qtdSacas = BigInt(sacas);
     if (qtdSacas <= BigInt(0)) {
-      alert("A quantidade de sacas deve ser maior que zero.");
+      notify.error("A quantidade de sacas deve ser maior que zero.");
       return;
     }
 
@@ -77,8 +78,10 @@ export default function BotaoAssinarAcordo({
       return;
     }
 
+    let toastId;
     try {
       setIsPending(true);
+      toastId = notify.loading("Enviando proposta...");
       // 2. Preparação da Chamada - usa SEMPRE o endereço resolvido pelo hook
       const transaction = prepareContractCall({
         contract: myContract,
@@ -94,27 +97,16 @@ export default function BotaoAssinarAcordo({
       
       setIsPending(false);
       setIsSuccess(true);
+      notify.success("Proposta enviada!", toastId);
     } catch (err: any) {
+      setIsPending(false);
       if (err?.transactionHash || err?.hash) {
         console.warn("Transação transmitida com hash, ignorando erro secundário de recibo:", err);
-        setIsPending(false);
         setIsSuccess(true);
+        notify.success("Proposta enviada!", toastId);
         return;
       }
-
-      if (
-        err?.message?.toLowerCase().includes("user rejected") ||
-        err?.code === 4001 ||
-        err?.name === "UserRejectedRequestError"
-      ) {
-        console.warn("Transação cancelada pelo usuário na MetaMask.");
-        setIsPending(false);
-        setIsCancelled(true);
-        return;
-      }
-
-      console.error("Erro na transação blockchain:", err);
-      setIsPending(false);
+      notify.fromError(err, toastId);
       setIsError(true);
     }
   };
