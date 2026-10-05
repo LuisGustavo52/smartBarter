@@ -32,7 +32,7 @@ export function fetchUserByWallet(address: string) {
       return res.json();
     })
     .catch((err) => {
-      console.error("Erro ao buscar usuário:", err);
+      console.warn("Erro ao buscar usuário:", err);
       return null;
     });
 

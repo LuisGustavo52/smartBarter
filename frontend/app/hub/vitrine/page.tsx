@@ -5,6 +5,7 @@ import { useActiveAccount } from "thirdweb/react";
 import BotaoAssinarAcordo from "@/components/BotaoAssinarAcordo";
 import UsuarioDisplay from "@/components/UsuarioDisplay";
 import ReputacaoEstrelas from "@/components/ReputacaoEstrelas";
+import { notify } from "@/lib/notify";
 
 export default function VitrinePage() {
   const account = useActiveAccount();
@@ -23,8 +24,9 @@ export default function VitrinePage() {
         const data = await res.json();
         setInsumos(data);
       } catch (err: any) {
-        console.error(err);
-        setError(err.message);
+        console.warn("Erro ao buscar vitrine:", err);
+        notify.error("Não foi possível carregar a vitrine. Verifique a conexão.", "vitrine-error");
+        setError("Não foi possível carregar os insumos da vitrine.");
       } finally {
         setIsLoading(false);
       }

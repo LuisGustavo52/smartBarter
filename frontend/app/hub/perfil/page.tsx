@@ -46,7 +46,8 @@ export default function PerfilPage() {
           }
         }
       } catch (err) {
-        console.error("Erro ao carregar perfil:", err);
+        console.warn("Erro ao carregar perfil:", err);
+        notify.error("Não foi possível carregar o perfil. Verifique a conexão.", "perfil-error");
       } finally {
         setLoading(false);
       }
@@ -76,7 +77,7 @@ export default function PerfilPage() {
           setUsernameStatus(data.available ? "available" : "taken");
         }
       } catch (err) {
-        console.error("Erro ao validar username:", err);
+        console.warn("Erro ao validar username:", err);
         setUsernameStatus("idle");
       }
     }, 500);

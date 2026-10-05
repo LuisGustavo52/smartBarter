@@ -158,7 +158,7 @@ export function useNotificacoesCPR(accountAddress: string | undefined) {
         setDetalhes(pendenciasFinais);
         setTotal(naoLidasCount);
       } catch (error) {
-        console.error("Erro ao buscar notificações:", error);
+        console.warn("Erro ao buscar notificações:", error);
       } finally {
         setLoading(false);
       }

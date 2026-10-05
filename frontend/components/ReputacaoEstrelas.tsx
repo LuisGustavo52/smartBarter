@@ -35,7 +35,10 @@ export default function ReputacaoEstrelas({ carteira }: ReputacaoEstrelas) {
 
     setIsLoading(true);
     fetch(`http://localhost:3001/reputacao/${carteira}`)
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error("Erro ao buscar reputação");
+        return res.json();
+      })
       .then((data: ReputacaoData) => setReputacao(data))
       .catch((err) => {
         console.warn("Erro ao buscar reputação:", err);

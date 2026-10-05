@@ -65,10 +65,10 @@ function CadastroFlow() {
             setUserExists(false);
           }
         } else {
-           console.error("Erro na resposta da API:", res.status);
+           console.warn("Erro na resposta da API:", res.status);
         }
       } catch (err) {
-        console.error("Erro de conexão com a API NestJS:", err);
+        console.warn("Erro de conexão com a API NestJS:", err);
         setError("Erro ao verificar carteira no servidor.");
       } finally {
         setTimeout(() => setCheckingWallet(false), 800);
