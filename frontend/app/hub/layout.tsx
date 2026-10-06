@@ -1,6 +1,8 @@
 import HubNav from "@/components/HubNav";
 import HubNotifications from "@/components/HubNotifications";
 
+import HubGuard from "@/components/HubGuard";
+
 export default function HubLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-[#F8FAF9] text-gray-900 font-sans selection:bg-emerald-200 selection:text-emerald-900">
@@ -14,7 +16,7 @@ export default function HubLayout({ children }: { children: React.ReactNode }) {
 
       {/* Conteúdo específico da página */}
       <main>
-        {children}
+        <HubGuard>{children}</HubGuard>
       </main>
     </div>
   );

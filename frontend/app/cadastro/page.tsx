@@ -7,6 +7,8 @@ import { createThirdwebClient } from "thirdweb";
 import { createAuth, signLoginPayload } from "thirdweb/auth";
 import { useRouter } from "next/navigation";
 import UsuarioDisplay from "@/components/UsuarioDisplay";
+import { notify } from "@/lib/notify";
+import { walletsPermitidas } from "@/lib/wallets";
 
 // Configuração do Cliente Thirdweb v5
 const client = createThirdwebClient({
@@ -28,6 +30,8 @@ function CadastroFlow() {
   const [loadingSubmit, setLoadingSubmit] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
+  const [verifyFailed, setVerifyFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
 
   const [formData, setFormData] = useState({
     nomeCompleto: "",
@@ -51,6 +55,7 @@ function CadastroFlow() {
       
       setCheckingWallet(true);
       setError("");
+      setVerifyFailed(false);
 
       try {
         const res = await fetch(`http://localhost:3001/users/wallet/${account.address}`);
@@ -66,17 +71,20 @@ function CadastroFlow() {
           }
         } else {
            console.warn("Erro na resposta da API:", res.status);
+           setVerifyFailed(true);
+           notify.error("Não foi possível verificar sua identidade. Verifique a conexão.", "cadastro-verify-error");
         }
       } catch (err) {
         console.warn("Erro de conexão com a API NestJS:", err);
-        setError("Erro ao verificar carteira no servidor.");
+        setVerifyFailed(true);
+        notify.error("Não foi possível verificar sua identidade. Verifique a conexão.", "cadastro-verify-error");
       } finally {
         setTimeout(() => setCheckingWallet(false), 800);
       }
     }
 
     verifyAccount();
-  }, [account?.address, router]);
+  }, [account?.address, router, retry]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,11 +93,15 @@ function CadastroFlow() {
     setLoadingSubmit(true);
     setError("");
     
+    let toastId;
     try {
+      toastId = notify.loading("Solicitando assinatura na carteira...");
       // 1. Gera Payload e Solicita Assinatura (SIWE) do Usuário
       const payload = await auth.generatePayload({ address: account.address });
       const signedResult = await signLoginPayload({ account, payload });
       const signature = typeof signedResult === "string" ? signedResult : (signedResult as any)?.signature ?? String(signedResult);
+
+      notify.loading("Finalizando cadastro...", toastId);
 
       // 2. Envia para a API NestJS
       const response = await fetch("http://localhost:3001/users/register", {
@@ -104,16 +116,18 @@ function CadastroFlow() {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Erro ao registrar usuário.");
+        const errorData = await response.json().catch(() => ({}));
+        const msg = Array.isArray(errorData.message) ? errorData.message.join(" ") : errorData.message || "Erro ao registrar usuário.";
+        throw Object.assign(new Error(msg), { userMessage: msg });
       }
 
       setSuccess(true);
+      notify.success("Cadastro concluído!", toastId);
       setTimeout(() => {
         router.push('/hub/novo-ativo');
       }, 1500);
     } catch (err: any) {
-      setError(err.message);
+      notify.fromError(err, toastId);
     } finally {
       setLoadingSubmit(false);
     }
@@ -126,6 +140,7 @@ function CadastroFlow() {
       <div className={`w-full max-w-2xl flex ${account ? 'justify-end mb-4' : 'justify-center scale-110 mt-10'}`}>
         <ConnectButton 
           client={client}
+          wallets={walletsPermitidas}
           chain={smartBarterLocalChain} 
           connectButton={{ label: "Ativar Identidade Digital" }}
         />
@@ -185,8 +200,20 @@ function CadastroFlow() {
                 </div>
               )}
 
-              {!checkingWallet && !userExists && !success && (
-                <div className="flex items-center gap-3 text-amber-400 animate-in fade-in slide-in-from-bottom-2">
+              {!checkingWallet && verifyFailed && (
+                <div className="flex flex-col items-center justify-center p-6 bg-amber-900/20 border border-amber-500/30 rounded-2xl animate-in fade-in slide-in-from-bottom-2 mt-4 text-center">
+                  <div className="flex items-center gap-3 text-amber-400 mb-4">
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                    <span className="font-semibold text-lg">Não foi possível verificar sua identidade no sistema.</span>
+                  </div>
+                  <button onClick={() => setRetry(r => r + 1)} className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl transition-all shadow-md">
+                    Tentar Novamente
+                  </button>
+                </div>
+              )}
+
+              {!checkingWallet && !userExists && !success && !verifyFailed && (
+                <div className="flex items-center gap-3 text-amber-400 animate-in fade-in slide-in-from-bottom-2 mt-4">
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                   <span className="text-sm font-medium">Conta nova detectada. Por favor, conclua seu cadastro abaixo.</span>
                 </div>
@@ -202,7 +229,7 @@ function CadastroFlow() {
           </div>
 
           {/* ESTADO 2: Usuário Novo (Formulário) */}
-          {!checkingWallet && !userExists && !success && (
+          {!checkingWallet && !userExists && !success && !verifyFailed && (
             <form onSubmit={handleSubmit} className="w-full max-w-2xl mx-auto bg-white rounded-3xl p-8 sm:p-10 shadow-2xl animate-in slide-in-from-top-8 fade-in duration-700">
               
               <h2 className="text-2xl font-bold text-emerald-950 mb-2">Completar Perfil</h2>
