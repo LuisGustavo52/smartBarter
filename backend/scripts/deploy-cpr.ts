@@ -1,15 +1,10 @@
-import { ethers } from "hardhat";
+import { network } from "hardhat";
 
 async function main() {
   console.log("Iniciando deploy do SmartBarterCPR...");
-  
-  const CPR = await ethers.getContractFactory("SmartBarterCPR");
-  const cpr = await CPR.deploy();
-
-  await cpr.waitForDeployment();
-  const address = await cpr.getAddress();
-
-  console.log(`SmartBarterCPR deployed to: ${address}`);
+  const { viem } = await network.create();
+  const cpr = await viem.deployContract("SmartBarterCPR");
+  console.log(`SmartBarterCPR deployed to: ${cpr.address}`);
 }
 
 main().catch((error) => {
