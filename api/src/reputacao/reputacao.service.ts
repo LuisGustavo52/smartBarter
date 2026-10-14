@@ -9,12 +9,12 @@ import {
   http,
   parseAbi,
   isAddress,
-  isAddressEqual,
   getAddress,
   defineChain,
   type Address,
   type PublicClient,
 } from 'viem';
+import { SupabaseService } from '../supabase/supabase.service';
 
 export interface Reputacao {
   carteira: string;
@@ -38,10 +38,8 @@ const hardhatLocal = defineChain({
 });
 
 const CONTRACT_ABI = parseAbi([
-  'function propostas(uint256) view returns (address produtor, address fornecedor, uint256 sacas, string insumo, bool ativa, bool pendente, bool insumoConfirmado)',
-  'event PropostaAceita(uint256 indexed propostaId)',
-  'event PropostaRecusada(uint256 indexed propostaId)',
-  'event CPREmitida(uint256 indexed tokenId, address indexed fornecedor, uint256 sacas, string insumo)',
+  'function cprs(uint256) view returns (address produtor, address fornecedor, uint256 sacas, string insumo, string quantidadeInsumo, string safra, string tipoCafe, string idPropostaOffchain, bool aguardandoEntrega, bool entregue, bool liquidada)',
+  'event CPREmitida(uint256 indexed tokenId, address indexed produtor, address indexed fornecedor, uint256 sacas, string insumo, string quantidadeInsumo, string safra, string tipoCafe, string idPropostaOffchain)',
   'event CPRLiquidada(uint256 indexed tokenId)',
 ]);
 
@@ -49,6 +47,8 @@ const CONTRACT_ABI = parseAbi([
 export class ReputacaoService {
   private readonly logger = new Logger(ReputacaoService.name);
   private client: PublicClient | null = null;
+
+  constructor(private readonly supabaseService: SupabaseService) {}
 
   private getClient(): PublicClient {
     if (!this.client) {
@@ -82,74 +82,51 @@ export class ReputacaoService {
     };
 
     try {
-      const [logsAceitas, logsRecusadas, logsEmitidas, logsLiquidadas] =
-        await Promise.all([
-          client.getLogs({
-            ...logFilter,
-            event: CONTRACT_ABI[1],
-          }),
-          client.getLogs({
-            ...logFilter,
-            event: CONTRACT_ABI[2],
-          }),
-          client.getLogs({
-            ...logFilter,
-            event: CONTRACT_ABI[3],
-            args: { fornecedor },
-          }),
-          client.getLogs({
-            ...logFilter,
-            event: CONTRACT_ABI[4],
-          }),
-        ]);
+      const { data: propostas, error: propostasError } =
+        await this.supabaseService
+          .getClient()
+          .from('propostas')
+          .select('status')
+          .ilike('fornecedor_wallet', carteira);
+      if (propostasError) {
+        throw new InternalServerErrorException('Erro ao buscar o histórico de propostas.');
+      }
+
+      const logsEmitidas = await client.getLogs({
+        ...logFilter,
+        event: CONTRACT_ABI[1],
+        args: { fornecedor },
+      });
+      const logsLiquidadas = await client.getLogs({
+        ...logFilter,
+        event: CONTRACT_ABI[2],
+      });
 
       this.logger.log(
-        `Eventos brutos: aceitas=${logsAceitas.length} recusadas=${logsRecusadas.length} emitidas=${logsEmitidas.length} liquidadas=${logsLiquidadas.length}`,
+        `Histórico: propostas=${propostas.length} emitidas=${logsEmitidas.length} liquidadas=${logsLiquidadas.length}`,
       );
 
-      const propostaCache = new Map<string, Address | null>();
-      const fornecedorDaProposta = async (id: bigint): Promise<Address | null> => {
-        const key = id.toString();
-        if (propostaCache.has(key)) {
-          return propostaCache.get(key) ?? null;
-        }
-        const proposta = await client.readContract({
-          address: contractAddress,
-          abi: CONTRACT_ABI,
-          functionName: 'propostas',
-          args: [id],
-        });
-        const endereco = proposta[1];
-        if (endereco === '0x0000000000000000000000000000000000000000') {
-          propostaCache.set(key, null);
-          return null;
-        }
-        propostaCache.set(key, endereco);
-        return endereco;
-      };
-
-      const ehDoFornecedor = async (id: bigint | undefined) => {
-        if (id === undefined) return false;
-        const endereco = await fornecedorDaProposta(id);
-        return endereco !== null && isAddressEqual(endereco, fornecedor);
-      };
-
-      let propostasAceitas = 0;
-      for (const log of logsAceitas) {
-        if (await ehDoFornecedor(log.args.propostaId)) propostasAceitas += 1;
-      }
-
-      let propostasRecusadas = 0;
-      for (const log of logsRecusadas) {
-        if (await ehDoFornecedor(log.args.propostaId)) propostasRecusadas += 1;
-      }
+      const propostasAceitas = propostas.filter(
+        (proposta) => proposta.status === 'Aceita',
+      ).length;
+      const propostasRecusadas = propostas.filter(
+        (proposta) => proposta.status === 'Recusada',
+      ).length;
 
       let cprsLiquidadas = 0;
       for (const log of logsLiquidadas) {
-        if (await ehDoFornecedor(log.args.tokenId)) cprsLiquidadas += 1;
+        if (log.args.tokenId === undefined) continue;
+        const cpr = await client.readContract({
+          address: contractAddress,
+          abi: CONTRACT_ABI,
+          functionName: 'cprs',
+          args: [log.args.tokenId],
+        });
+        if (cpr[1].toLowerCase() === fornecedor.toLowerCase()) {
+          cprsLiquidadas += 1;
+        }
       }
 
-      // CPREmitida já vem filtrada por fornecedor; confirma histórico on-chain.
       void logsEmitidas;
 
       return this.montarResposta({

@@ -1,120 +1,133 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
-import { CreateAssetDto } from './dto/create-asset.dto';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
-import { ExchangeService } from './exchange.service';
+import { CreateAssetDto } from './dto/create-asset.dto';
+import { UpdateAssetDto } from './dto/update-asset.dto';
 
 @Injectable()
 export class AssetsService {
-  constructor(
-    private readonly supabaseService: SupabaseService,
-    private readonly exchangeService: ExchangeService,
-  ) {}
+  constructor(private readonly supabaseService: SupabaseService) {}
 
-  async createAsset(createAssetDto: CreateAssetDto) {
-    const supabase = this.supabaseService.getClient();
+  private async ensureFornecedor(wallet: string) {
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('users')
+      .select('carteira_digital')
+      .ilike('carteira_digital', wallet)
+      .eq('tipo_usuario', 'FORNECEDOR')
+      .maybeSingle();
 
-    const { data: newAsset, error: insertError } = await supabase
+    if (error) throw new InternalServerErrorException('Erro ao validar fornecedor.');
+    if (!data) throw new BadRequestException('A carteira não pertence a um fornecedor.');
+  }
+
+  async createAsset(dto: CreateAssetDto) {
+    await this.ensureFornecedor(dto.fornecedorWallet);
+    const { data, error } = await this.supabaseService
+      .getClient()
       .from('assets')
-      .insert([
-        {
-          tipo_ativo: createAssetDto.tipoAtivo,
-          descricao: createAssetDto.descricao,
-          quantidade: createAssetDto.quantidade,
-          unidade_medida: createAssetDto.unidadeMedida,
-          valor_estimado: createAssetDto.valorEstimado,
-          dono_wallet: createAssetDto.donoWallet,
-        },
-      ])
+      .insert({
+        tipo_ativo: 'INSUMO',
+        nome: dto.nome,
+        descricao: dto.descricao,
+        preco_sacas: dto.precoSacas,
+        fornecedor_wallet: dto.fornecedorWallet,
+      })
       .select()
       .single();
 
-    if (insertError) {
-      console.error('ERRO DETALHADO DO SUPABASE:', insertError);
-      throw new InternalServerErrorException('Erro ao salvar ativo no banco de dados.');
-    }
-
-    return {
-      id: newAsset.id,
-      message: 'Ativo criado com sucesso!',
-    };
+    if (error) throw new InternalServerErrorException('Erro ao cadastrar o insumo.');
+    return data;
   }
 
-  async getAssetsByWallet(address: string) {
-    const supabase = this.supabaseService.getClient();
-
-    const { data, error } = await supabase
+  async getAssets(tipoAtivo = 'INSUMO') {
+    const { data, error } = await this.supabaseService
+      .getClient()
       .from('assets')
       .select('*')
-      .ilike('dono_wallet', address)
+      .eq('tipo_ativo', tipoAtivo)
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('ERRO AO BUSCAR ATIVOS:', error);
-      throw new InternalServerErrorException('Erro ao buscar ativos no banco de dados.');
-    }
-
-    return data || [];
+    if (error) throw new InternalServerErrorException('Erro ao buscar os insumos.');
+    return data ?? [];
   }
 
-  async getAssets(tipoAtivo?: string) {
-    const supabase = this.supabaseService.getClient();
+  async getAsset(id: string) {
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('assets')
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
 
-    // 1. Busca os ativos (com ou sem filtro de tipo_ativo)
-    let query = supabase.from('assets').select('*').order('created_at', { ascending: false });
-    if (tipoAtivo) {
-      query = query.eq('tipo_ativo', tipoAtivo);
+    if (error) throw new InternalServerErrorException('Erro ao buscar o insumo.');
+    if (!data) throw new NotFoundException('Insumo não encontrado.');
+    return data;
+  }
+
+  async getAssetsByWallet(wallet: string) {
+    await this.ensureFornecedor(wallet);
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('assets')
+      .select('*')
+      .eq('tipo_ativo', 'INSUMO')
+      .ilike('fornecedor_wallet', wallet)
+      .order('created_at', { ascending: false });
+
+    if (error) throw new InternalServerErrorException('Erro ao buscar os insumos.');
+    return data ?? [];
+  }
+
+  async updateAsset(id: string, dto: UpdateAssetDto) {
+    await this.ensureFornecedor(dto.fornecedorWallet);
+    const asset = await this.getAsset(id);
+    if (asset.fornecedor_wallet.toLowerCase() !== dto.fornecedorWallet.toLowerCase()) {
+      throw new BadRequestException('O insumo não pertence ao fornecedor informado.');
     }
-    
-    const { data: assets, error: assetsError } = await query;
-    if (assetsError) {
-      console.error('ERRO AO BUSCAR ATIVOS GERAL:', assetsError);
-      throw new InternalServerErrorException('Erro ao buscar ativos.');
+
+    const updates = {
+      ...(dto.nome !== undefined && { nome: dto.nome }),
+      ...(dto.descricao !== undefined && { descricao: dto.descricao }),
+      ...(dto.precoSacas !== undefined && { preco_sacas: dto.precoSacas }),
+      updated_at: new Date().toISOString(),
+    };
+    const { data, error } = await this.supabaseService
+      .getClient()
+      .from('assets')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .maybeSingle();
+
+    if (error) throw new InternalServerErrorException('Erro ao atualizar o insumo.');
+    if (!data) throw new NotFoundException('Insumo não encontrado.');
+    return data;
+  }
+
+  async removeAsset(id: string, fornecedorWallet: string) {
+    await this.ensureFornecedor(fornecedorWallet);
+    const asset = await this.getAsset(id);
+    if (asset.fornecedor_wallet.toLowerCase() !== fornecedorWallet.toLowerCase()) {
+      throw new BadRequestException('O insumo não pertence ao fornecedor informado.');
     }
 
-    if (!assets || assets.length === 0) return [];
-
-    // 2. Extrai as carteiras unicas dos donos
-    const wallets = Array.from(new Set(assets.map(a => a.dono_wallet.toLowerCase())));
-
-    // 3. Busca os usuários associados a essas carteiras
-    // Usamos 'in' para buscar múltiplas carteiras de uma vez. Supabase API is case-sensitive, so we should search with proper case or use ilike.
-    // To be safe, we will fetch users and map them by lowercased wallet
-    let usersMap = new Map<string, any>();
-    if (wallets.length > 0) {
-      const { data: users, error: usersError } = await supabase
-        .from('users')
-        .select('carteira_digital, tipo_usuario, nome_propriedade_ou_empresa')
-        .in('carteira_digital', assets.map(a => a.dono_wallet)); // Pass the exact wallets from the assets array
-      
-      if (!usersError && users) {
-        users.forEach(u => usersMap.set(u.carteira_digital.toLowerCase(), u));
-      } else if (usersError) {
-         console.error('ERRO AO BUSCAR USUÁRIOS:', usersError);
-         // Não jogamos erro aqui, apenas deixamos os campos de dono vazios se falhar
+    const { error } = await this.supabaseService
+      .getClient()
+      .from('assets')
+      .delete()
+      .eq('id', id);
+    if (error) {
+      if (error.code === '23503') {
+        throw new ConflictException('O insumo possui propostas vinculadas.');
       }
+      throw new InternalServerErrorException('Erro ao remover o insumo.');
     }
-
-    // 4. Busca a taxa de câmbio atual
-    const usdBrlRate = await this.exchangeService.getUsdBrlRate();
-
-    // 5. Mapeia a resposta final combinando tudo
-    return assets.map(asset => {
-      const dono = usersMap.get(asset.dono_wallet.toLowerCase());
-      const valorOriginal = Number(asset.valor_estimado) || 0;
-      
-      return {
-        id: asset.id,
-        tipo_ativo: asset.tipo_ativo,
-        descricao: asset.descricao,
-        quantidade: asset.quantidade,
-        unidade_medida: asset.unidade_medida,
-        valor_estimado_brl: valorOriginal,
-        valor_estimado_usd: valorOriginal / usdBrlRate,
-        dono_wallet: asset.dono_wallet,
-        dono_tipo_usuario: dono?.tipo_usuario || 'DESCONHECIDO',
-        dono_nome_propriedade_ou_empresa: dono?.nome_propriedade_ou_empresa || 'Não Informado',
-        created_at: asset.created_at,
-      };
-    });
+    return { success: true };
   }
 }

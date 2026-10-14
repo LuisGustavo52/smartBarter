@@ -7,6 +7,7 @@ import { SupabaseModule } from './supabase/supabase.module';
 import { AssetsModule } from './assets/assets.module';
 import { MarketModule } from './market/market.module';
 import { ReputacaoModule } from './reputacao/reputacao.module';
+import { PropostasModule } from './propostas/propostas.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { ReputacaoModule } from './reputacao/reputacao.module';
     AssetsModule,
     MarketModule,
     ReputacaoModule,
+    PropostasModule,
   ],
   controllers: [AppController],
   providers: [AppService],
