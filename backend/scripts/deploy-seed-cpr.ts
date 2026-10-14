@@ -1,7 +1,7 @@
 import { network } from "hardhat";
 
 async function main() {
-  const { viem } = await network.create();
+  const { viem } = await network.create({ network: "localhost" });
   const [deployer, produtor] = await viem.getWalletClients();
   const cpr = await viem.deployContract("SmartBarterCPR");
 

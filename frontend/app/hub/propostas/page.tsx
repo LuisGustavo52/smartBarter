@@ -1,317 +1,251 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useActiveAccount, useReadContract } from "thirdweb/react";
-import { getContract, prepareContractCall, sendTransaction, readContract } from "thirdweb";
+import { useCallback, useEffect, useState } from "react";
+import { useActiveAccount } from "thirdweb/react";
+import {
+  createThirdwebClient,
+  getContract,
+  parseEventLogs,
+  prepareContractCall,
+  prepareEvent,
+  sendTransaction,
+} from "thirdweb";
 import { smartBarterLocalChain } from "@/lib/smartBarterChain";
-import { createThirdwebClient } from "thirdweb";
-import BotaoConfirmarInsumo from "@/components/BotaoConfirmarInsumo";
-import { fetchRawEvents } from "@/lib/blockchain-queries";
 import UsuarioDisplay from "@/components/UsuarioDisplay";
 import ReputacaoEstrelas from "@/components/ReputacaoEstrelas";
 import { notify } from "@/lib/notify";
 
-// Inicializa o cliente Thirdweb
-const client = createThirdwebClient({
-  clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "d3690d56bdafa6a3cd84d948259dbbe0",
-});
-
+const API_BASE_URL = "http://localhost:3001";
 const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
-
-const myContract = getContract({
+const client = createThirdwebClient({
+  clientId:
+    process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID ||
+    "d3690d56bdafa6a3cd84d948259dbbe0",
+});
+const contract = getContract({
   client,
   chain: smartBarterLocalChain,
   address: CONTRACT_ADDRESS,
 });
 
-function BotaoAceitar({ propostaId, onSuccess }: { propostaId: bigint; onSuccess: () => void }) {
-  const account = useActiveAccount();
-  const [isPending, setIsPending] = useState(false);
+type Proposta = {
+  id: string;
+  produtor_wallet: string;
+  quantidade_comprada: number;
+  safra: string;
+  tipo_cafe: string;
+  assets?: { nome: string; descricao: string; preco_sacas: number };
+};
 
-  const handleAceitar = async () => {
+const cprEmittedEvent = prepareEvent({
+  signature:
+    "event CPREmitida(uint256 indexed tokenId, address indexed produtor, address indexed fornecedor, uint256 sacas, string insumo, string quantidadeInsumo, string safra, string tipoCafe, string idPropostaOffchain)",
+});
+
+async function readReceipt(hash: string) {
+  const response = await fetch("http://127.0.0.1:8545", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: Date.now(),
+      method: "eth_getTransactionReceipt",
+      params: [hash],
+    }),
+  });
+  if (!response.ok) throw new Error("Não foi possível consultar o RPC local.");
+  const payload = await response.json();
+  if (payload.error) throw new Error(payload.error.message ?? "Erro no RPC local.");
+  if (!payload.result) throw new Error("A transação ainda não foi confirmada.");
+  if (payload.result.status !== "0x1") throw new Error("A emissão da CPR foi revertida.");
+  return payload.result;
+}
+
+async function getTokenId(hash: string) {
+  const receipt = await readReceipt(hash);
+  const events = parseEventLogs({
+    logs: receipt.logs ?? [],
+    events: [cprEmittedEvent],
+  });
+  const tokenId = events[0]?.args?.tokenId;
+  if (tokenId === undefined) {
+    throw new Error("Recibo confirmado, mas o evento CPREmitida não foi encontrado.");
+  }
+  return tokenId;
+}
+
+function BotaoAceitar({
+  proposta,
+  onSuccess,
+}: {
+  proposta: Proposta;
+  onSuccess: () => void;
+}) {
+  const account = useActiveAccount();
+  const [pending, setPending] = useState(false);
+
+  const aceitar = async () => {
     if (!account) {
       notify.error("Carteira não conectada.");
       return;
     }
 
-    let toastId;
+    let toastId: string | undefined;
     try {
-      setIsPending(true);
-      toastId = notify.loading("Aceitando proposta...");
+      setPending(true);
+      toastId = notify.loading("Emitindo CPR na blockchain...");
+      const quantidade = BigInt(Math.round(Number(proposta.quantidade_comprada)));
+      if (quantidade <= BigInt(0)) throw new Error("Quantidade inválida.");
 
       const transaction = prepareContractCall({
-        contract: myContract,
-        method: "function aceitarProposta(uint256 _propostaId)",
-        params: [propostaId],
+        contract,
+        method:
+          "function emitirCPR(address produtor, uint256 sacas, string insumo, string quantidadeInsumo, string safra, string tipoCafe, string idPropostaOffchain)",
+        params: [
+          proposta.produtor_wallet as `0x${string}`,
+          quantidade,
+          proposta.assets?.nome ?? "Insumo",
+          `${proposta.quantidade_comprada} unidades`,
+          proposta.safra,
+          proposta.tipo_cafe,
+          proposta.id,
+        ],
       });
+      const result = await sendTransaction({ transaction, account });
+      const tokenId = await getTokenId(result.transactionHash);
 
-      const res = await sendTransaction({ transaction, account });
-      if (res?.transactionHash) {
-        console.log("Proposta aceita com sucesso, hash:", res.transactionHash);
+      notify.loading("Salvando aceite no backend...", toastId);
+      const response = await fetch(`${API_BASE_URL}/propostas/${proposta.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fornecedorWallet: account.address,
+          status: "Aceita",
+          tokenId: Number(tokenId),
+        }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.message ?? "A CPR foi emitida, mas o aceite não foi salvo.");
       }
-      
-      setIsPending(false);
-      notify.success("Proposta aceita com sucesso!", toastId);
+      notify.success(`Proposta aceita. CPR #${tokenId.toString()} emitida.`, toastId);
       onSuccess();
-    } catch (err: any) {
-      setIsPending(false);
-      if (err?.transactionHash || err?.hash) {
-        console.warn("Transação transmitida com hash, ignorando erro secundário de recibo:", err);
-        notify.success("Proposta aceita com sucesso!", toastId);
-        onSuccess();
-        return;
-      }
-      notify.fromError(err, toastId);
+    } catch (error) {
+      notify.fromError(error, toastId);
+    } finally {
+      setPending(false);
     }
   };
 
   return (
-    <div className="flex flex-col gap-2">
-      <button
-        onClick={handleAceitar}
-        disabled={isPending}
-        className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-wait"
-      >
-        {isPending ? (
-          <>
-            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-            Processando...
-          </>
-        ) : (
-          "Aceitar Proposta"
-        )}
-      </button>
-    </div>
+    <button
+      onClick={aceitar}
+      disabled={pending}
+      className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md disabled:opacity-70 disabled:cursor-wait"
+    >
+      {pending ? "Processando..." : "Emitir CPR e aceitar"}
+    </button>
   );
 }
 
 export default function PropostasPage() {
   const account = useActiveAccount();
-  const [refreshCounter, setRefreshCounter] = useState(0);
+  const [propostas, setPropostas] = useState<Proposta[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // --- PRODUTOR STATE ---
-  const [propostasProdutor, setPropostasProdutor] = useState<any[]>([]);
-  const [isPendingProdutor, setIsPendingProdutor] = useState(false);
-
-  const addressToSearch = account?.address || "0x0000000000000000000000000000000000000000";
-
-  // --- LEITURA FORNECEDOR (MANTIDA) ---
-  const { data, isPending, refetch } = useReadContract({
-    contract: myContract,
-    method: "function getPropostasPendentesPorFornecedor(address _fornecedor) external view returns (uint256[] ids, (address produtor, address fornecedor, uint256 sacas, string insumo, bool ativa, bool pendente, bool insumoConfirmado)[] pendentes)",
-    params: [addressToSearch]
-  });
-
-  // --- LEITURA PRODUTOR ---
-  useEffect(() => {
-    async function fetchPropostasProdutor() {
-      if (!account?.address) return;
-      setIsPendingProdutor(true);
-      try {
-        const events = await fetchRawEvents(
-          myContract.address, 
-          "event PropostaCriada(uint256 indexed propostaId, address indexed produtor, address indexed fornecedor, uint256 sacas, string insumo)"
-        );
-
-        // 2. Filtrar os eventos onde o produtor e a conta atual
-        const meusEventos = events.filter(
-          (e: any) => e.args.produtor?.toLowerCase() === account.address.toLowerCase()
-        );
-
-        // 3. Ler o status atual de cada proposta encontrada
-        const propostasAtivas: any[] = [];
-        for (const e of meusEventos) {
-          const pId = e.args.propostaId;
-          if (pId !== undefined) {
-            const p = await readContract({
-              contract: myContract,
-              method: "function propostas(uint256) view returns (address produtor, address fornecedor, uint256 sacas, string insumo, bool ativa, bool pendente, bool insumoConfirmado)",
-              params: [pId],
-            });
-
-            // Queremos apenas as ATIVAS (aceitas pelo fornecedor) e NÃO CONFIRMADAS ainda
-            const condition = p[4] === true && p[6] === false;
-
-            if (condition) {
-              propostasAtivas.push({
-                id: pId,
-                produtor: p[0],
-                fornecedor: p[1],
-                sacas: p[2],
-                insumo: p[3]
-              });
-            }
-          }
-        }
-
-        setPropostasProdutor(propostasAtivas);
-      } catch (err) {
-        console.warn("Erro ao buscar propostas do produtor:", err);
-        notify.error("Não foi possível carregar as propostas. Verifique a conexão.", "propostas-produtor-error");
-      } finally {
-        setIsPendingProdutor(false);
-      }
+  const carregar = useCallback(async () => {
+    if (!account?.address) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const query = new URLSearchParams({
+        fornecedorWallet: account.address,
+        status: "Pendente",
+      });
+      const response = await fetch(`${API_BASE_URL}/propostas?${query}`);
+      if (!response.ok) throw new Error("Falha ao consultar propostas.");
+      setPropostas(await response.json());
+    } catch (err) {
+      console.warn("Erro ao carregar propostas:", err);
+      setError("Não foi possível carregar as propostas pendentes.");
+    } finally {
+      setLoading(false);
     }
+  }, [account?.address]);
 
-    fetchPropostasProdutor();
-  }, [account?.address, refreshCounter]);
-
-  const handleSuccess = () => {
-    setRefreshCounter(c => c + 1);
-    refetch(); // Força o hook do thirdweb a atualizar
-  };
+  useEffect(() => {
+    carregar();
+  }, [carregar]);
 
   return (
-    <div className="max-w-6xl mx-auto py-12 px-6 animate-in fade-in duration-700">
-      
-      {/* Banner Superior */}
-      <div className="bg-[#0A1A14] text-white rounded-3xl p-8 mb-10 shadow-xl relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-6">
-        <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-          <svg className="w-48 h-48" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-        </div>
-        
-        <div className="relative z-10">
+    <div className="max-w-6xl mx-auto py-12 px-6">
+      <div className="bg-[#0A1A14] text-white rounded-3xl p-8 mb-10 shadow-xl flex flex-col md:flex-row justify-between items-center gap-6">
+        <div>
           <h1 className="text-3xl font-serif font-bold mb-2">Painel de Propostas</h1>
-            <p className="text-emerald-100/80 text-sm max-w-md">
-              Visualize suas propostas pendentes e confirme o recebimento de insumos para emitir a CPR.
-            </p>
-          </div>
-
-          <div className="relative z-10 w-full md:w-auto flex flex-col items-end gap-3">
-            {account ? (
-              <>
-                <span className="text-emerald-500 text-xs font-bold uppercase tracking-wider">Conta Conectada</span>
-                <div className="inline-flex items-center gap-3 bg-white/10 backdrop-blur-md border border-white/20 px-5 py-3 rounded-2xl">
-                  <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.8)]"></div>
-                  <span className="font-mono text-sm text-white tracking-wider">
-                    <UsuarioDisplay address={account.address} showIcon={false} />
-                  </span>
-                </div>
-              </>
-            ) : (
-              <div className="inline-flex items-center gap-3 bg-red-900/40 border border-red-500/30 px-5 py-3 rounded-2xl text-red-200 text-sm font-medium">
-                Carteira Desconectada
-              </div>
-            )}
-          </div>
+          <p className="text-emerald-100/80 text-sm">
+            Propostas pendentes recebidas pelos seus insumos.
+          </p>
         </div>
-
-        {/* Conteúdo */}
-        {!account ? (
-          <div className="bg-white rounded-3xl shadow-sm border border-emerald-100 p-12 text-center">
-            <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
-              <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-3">Autenticação Necessária</h2>
-            <p className="text-gray-500 mb-8 max-w-md mx-auto">Conecte sua carteira para ver propostas.</p>
-            <a href="/cadastro" className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-xl transition-all">
-              Ir para o Login Web3
-            </a>
-          </div>
-        ) : (
-          <div className="space-y-12">
-            
-            {/* SEÇÃO DO PRODUTOR */}
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-                <span className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-sm">👨‍🌾</span>
-                Aguardando Recebimento de Insumos (Minhas Propostas)
-              </h2>
-              {isPendingProdutor ? (
-                <div className="flex flex-col items-center justify-center py-10 bg-white rounded-3xl border border-gray-100">
-                  <div className="w-8 h-8 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
-                  <p className="text-indigo-700 font-medium">Buscando na blockchain...</p>
-                </div>
-              ) : propostasProdutor.length > 0 ? (
-                <div className="grid grid-cols-1 gap-6">
-                  {propostasProdutor.map((proposta) => (
-                    <div key={proposta.id.toString()} className="bg-white rounded-3xl shadow-sm border border-indigo-100 p-6 flex flex-col md:flex-row items-center justify-between gap-6 transition-all hover:shadow-md hover:border-indigo-300">
-                      <div className="flex-1 w-full">
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="bg-indigo-100 text-indigo-800 text-xs font-bold uppercase px-3 py-1 rounded-full">Proposta Aceita</span>
-                          <span className="text-gray-400 text-sm font-medium">ID #{proposta.id.toString()}</span>
-                        </div>
-                        <h3 className="text-xl font-bold text-gray-900 mb-1">{proposta.insumo}</h3>
-                        <p className="text-indigo-700 font-semibold mb-4">{proposta.sacas.toString()} Sacas</p>
-                        
-                        <div className="bg-gray-50 rounded-xl p-3 inline-flex flex-col gap-1 border border-gray-100">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-gray-500 font-bold uppercase">Fornecedor:</span>
-                            <span className="font-mono text-sm text-gray-700">
-                              <UsuarioDisplay address={proposta.fornecedor} showIcon={false} />
-                            </span>
-                          </div>
-                          <ReputacaoEstrelas carteira={proposta.fornecedor} />
-                        </div>
-                      </div>
-                      
-                      <div className="w-full md:w-auto flex justify-end">
-                        <BotaoConfirmarInsumo contract={myContract} propostaId={proposta.id} onSuccess={handleSuccess} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="bg-white/50 border border-dashed border-gray-300 rounded-3xl p-8 text-center text-gray-500">
-                  Nenhuma proposta sua está aguardando confirmação de insumos no momento.
-                </div>
-              )}
-            </div>
-
-            <hr className="border-gray-200" />
-
-            {/* SEÇÃO DO FORNECEDOR */}
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-                <span className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm">🏭</span>
-                Propostas Pendentes de Aceite (Para Mim)
-              </h2>
-              {isPending ? (
-                <div className="flex flex-col items-center justify-center py-10 bg-white rounded-3xl border border-gray-100">
-                  <div className="w-8 h-8 border-4 border-emerald-100 border-t-emerald-600 rounded-full animate-spin mb-4"></div>
-                  <p className="text-emerald-700 font-medium">Consultando a blockchain...</p>
-                </div>
-              ) : data && data[0].length > 0 ? (
-                <div className="grid grid-cols-1 gap-6">
-                  {data[0].map((id: any, index: number) => {
-                    const proposta = data[1][index];
-                    return (
-                      <div key={id.toString()} className="bg-white rounded-3xl shadow-sm border border-emerald-100 p-6 flex flex-col md:flex-row items-center justify-between gap-6 transition-all hover:shadow-md hover:border-emerald-300">
-                        <div className="flex-1 w-full">
-                          <div className="flex items-center gap-3 mb-2">
-                            <span className="bg-amber-100 text-amber-800 text-xs font-bold uppercase px-3 py-1 rounded-full">Proposta Pendente</span>
-                            <span className="text-gray-400 text-sm font-medium">ID #{id.toString()}</span>
-                          </div>
-                          <h3 className="text-xl font-bold text-gray-900 mb-1">{proposta.insumo}</h3>
-                          <p className="text-emerald-700 font-semibold mb-4">{proposta.sacas.toString()} Sacas</p>
-                          
-                          <div className="bg-gray-50 rounded-xl p-3 inline-flex flex-col gap-1 border border-gray-100">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-gray-500 font-bold uppercase">Produtor:</span>
-                              <span className="font-mono text-sm text-gray-700">
-                                <UsuarioDisplay address={proposta.produtor} showIcon={false} />
-                              </span>
-                            </div>
-                            <ReputacaoEstrelas carteira={proposta.produtor} />
-                          </div>
-                        </div>
-                        
-                        <div className="w-full md:w-auto flex justify-end">
-                          <BotaoAceitar propostaId={id} onSuccess={handleSuccess} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="bg-white/50 border border-dashed border-gray-300 rounded-3xl p-8 text-center text-gray-500">
-                  Não há propostas de produtores aguardando o seu aceite.
-                </div>
-              )}
-            </div>
-
+        {account && (
+          <div className="inline-flex items-center gap-3 bg-white/10 border border-white/20 px-5 py-3 rounded-2xl">
+            <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse" />
+            <UsuarioDisplay address={account.address} showIcon={false} />
           </div>
         )}
       </div>
+
+      {!account ? (
+        <div className="bg-white rounded-3xl border border-emerald-100 p-12 text-center">
+          <h2 className="text-2xl font-bold text-gray-900 mb-3">Autenticação Necessária</h2>
+          <p className="text-gray-500 mb-8">Conecte sua carteira para ver propostas.</p>
+          <a href="/cadastro" className="inline-flex bg-emerald-600 text-white font-bold py-3 px-8 rounded-xl">
+            Ir para o Login Web3
+          </a>
+        </div>
+      ) : (
+        <section>
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">🏭 Propostas Pendentes de Aceite</h2>
+          {loading ? (
+            <div className="text-center py-12">Buscando propostas pendentes...</div>
+          ) : error ? (
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-3xl p-8 text-center">
+              <p>{error}</p>
+              <button onClick={carregar} className="mt-4 font-bold underline">Tentar novamente</button>
+            </div>
+          ) : propostas.length === 0 ? (
+            <div className="bg-white/50 border border-dashed border-gray-300 rounded-3xl p-10 text-center text-gray-500">
+              Não há propostas pendentes.
+            </div>
+          ) : (
+            <div className="grid gap-6">
+              {propostas.map((proposta) => (
+                <div key={proposta.id} className="bg-white rounded-3xl shadow-sm border border-emerald-100 p-6 flex flex-col md:flex-row justify-between gap-6">
+                  <div>
+                    <span className="bg-amber-100 text-amber-800 text-xs font-bold uppercase px-3 py-1 rounded-full">
+                      Pendente
+                    </span>
+                    <h3 className="text-xl font-bold text-gray-900 mt-3">
+                      {proposta.assets?.nome ?? "Insumo"}
+                    </h3>
+                    <p className="text-emerald-700 font-semibold mt-1">
+                      {proposta.quantidade_comprada} unidades · Safra {proposta.safra} · {proposta.tipo_cafe}
+                    </p>
+                    <div className="bg-gray-50 rounded-xl p-3 mt-4">
+                      <span className="text-xs text-gray-500 font-bold uppercase">Produtor: </span>
+                      <UsuarioDisplay address={proposta.produtor_wallet} showIcon={false} />
+                      <ReputacaoEstrelas carteira={proposta.produtor_wallet} />
+                    </div>
+                  </div>
+                  <div className="flex items-center">
+                    <BotaoAceitar proposta={proposta} onSuccess={carregar} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+    </div>
   );
 }

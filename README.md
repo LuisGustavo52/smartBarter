@@ -33,6 +33,10 @@ blockchain e todo o estado (contrato, saldos) junto.
 Isso reimplanta o contrato, financia as carteiras de teste, e já
 atualiza o endereço do contrato nos arquivos do frontend.
 
+ou, em /backend, o comando:
+npx hardhat run --network localhost scripts/deploy-cpr.ts
+
+
 **Terminal 3 — API (NestJS)**
     cd api
     npm run start:dev
