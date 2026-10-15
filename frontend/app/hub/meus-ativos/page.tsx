@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useActiveAccount } from "thirdweb/react";
-import BotaoAssinarAcordo from "@/components/BotaoAssinarAcordo";
 import BotaoLiquidarCPR from "@/components/BotaoLiquidarCPR";
 import { getContract, prepareEvent, readContract, createThirdwebClient } from "thirdweb";
 import { smartBarterLocalChain } from "@/lib/smartBarterChain";
@@ -246,13 +245,8 @@ export default function MeusAtivosPage() {
                           </div>
                         </div>
 
-                        {/* Integração Web3 */}
                         <div className="pt-6 border-t border-gray-100">
-                          <p className="text-xs text-gray-500 font-semibold uppercase mb-4 text-center">Ação na Blockchain</p>
-                          <BotaoAssinarAcordo 
-                            quantidadeSacasOriginal={BigInt(ativo.quantidade)} 
-                            descricaoInsumo={ativo.descricao}
-                          />
+                          <p className="text-sm text-gray-500">Inscrições de propostas são feitas por produtores na Vitrine.</p>
                         </div>
                       </div>
                     </div>

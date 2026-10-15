@@ -5,7 +5,7 @@ import { prepareContractCall, sendTransaction } from "thirdweb";
 import { notify } from "@/lib/notify";
 
 export default function BotaoConfirmarInsumo({
-  propostaId,
+  propostaId: tokenId,
   contract,
   onSuccess,
 }: {
@@ -29,8 +29,8 @@ export default function BotaoConfirmarInsumo({
 
       const transaction = prepareContractCall({
         contract,
-        method: "function confirmarRecebimentoInsumo(uint256 _propostaId)",
-        params: [propostaId],
+        method: "function confirmarEntrega(uint256 _tokenId)",
+        params: [tokenId],
       });
 
       const res = await sendTransaction({ transaction, account });
@@ -39,7 +39,7 @@ export default function BotaoConfirmarInsumo({
       }
 
       setIsPending(false);
-      notify.success("Recebimento confirmado! O NFT foi emitido para o fornecedor.", toastId);
+      notify.success("Entrega confirmada! A CPR foi destravada.", toastId);
       onSuccess();
     } catch (err: any) {
       setIsPending(false);

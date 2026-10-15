@@ -1,223 +1,75 @@
 "use client";
 
 import { useState } from "react";
-import { prepareContractCall, getContract, sendTransaction } from "thirdweb";
-import { useActiveAccount, useActiveWalletChain } from "thirdweb/react";
-import { smartBarterLocalChain } from "@/lib/smartBarterChain";
-import { createThirdwebClient } from "thirdweb";
-import { useResolveCarteira } from "@/hooks/useResolveCarteira";
-import toast from "react-hot-toast";
-import { notify, isUserRejection } from "@/lib/notify";
+import { useActiveAccount } from "thirdweb/react";
+import { notify } from "@/lib/notify";
 
-// 1. Inicializa o cliente Thirdweb
-const client = createThirdwebClient({
-  clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "d3690d56bdafa6a3cd84d948259dbbe0",
-});
-
-// 2. Aponta para o contrato implantado (Deployed)
-const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
-
-const myContract = getContract({
-  client,
-  chain: smartBarterLocalChain, // Usando a chain customizada com Chain ID 31337
-  address: CONTRACT_ADDRESS,
-});
-
-interface BotaoAssinarAcordoProps {
-  descricaoInsumo: string;
-  quantidadeSacasOriginal: bigint;
+interface Props {
+  assetId: string;
+  fornecedorWallet: string;
+  precoSacas: number;
 }
 
-export default function BotaoAssinarAcordo({
-  descricaoInsumo,
-  quantidadeSacasOriginal,
-}: BotaoAssinarAcordoProps) {
+export default function BotaoAssinarAcordo({ assetId, fornecedorWallet, precoSacas }: Props) {
   const account = useActiveAccount();
-  const activeChain = useActiveWalletChain();
-  
-  // Estado local
-  const [isPending, setIsPending] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [isError, setIsError] = useState(false);
-  const [isCancelled, setIsCancelled] = useState(false);
-  const [fornecedor, setFornecedor] = useState("");
-  const [sacas, setSacas] = useState(quantidadeSacasOriginal.toString());
-  const resolucaoCarteira = useResolveCarteira(fornecedor);
+  const [quantidade, setQuantidade] = useState("1");
+  const [safra, setSafra] = useState("");
+  const [tipoCafe, setTipoCafe] = useState("");
+  const [pending, setPending] = useState(false);
+  const [success, setSuccess] = useState(false);
 
-  const executarProposta = async (enderecoResolvido: string, qtdSacas: bigint) => {
-    let toastId;
-    try {
-      setIsPending(true);
-      toastId = notify.loading("Enviando proposta...");
-      const transaction = prepareContractCall({
-        contract: myContract,
-        method: "function proporCPR(address _fornecedor, uint256 _sacas, string memory _insumo)",
-        params: [enderecoResolvido, qtdSacas, descricaoInsumo],
-      });
-
-      const res = await sendTransaction({ transaction, account: account! });
-      if (res?.transactionHash) {
-        console.log("Transação enviada com sucesso, hash:", res.transactionHash);
-      }
-      
-      setIsPending(false);
-      setIsSuccess(true);
-      notify.success("Proposta enviada!", toastId);
-    } catch (err: any) {
-      setIsPending(false);
-      if (err?.transactionHash || err?.hash) {
-        console.warn("Transação transmitida com hash, ignorando erro secundário de recibo:", err);
-        setIsSuccess(true);
-        notify.success("Proposta enviada!", toastId);
-        return;
-      }
-      notify.fromError(err, toastId);
-      if (isUserRejection(err)) {
-        setIsCancelled(true);
-      } else {
-        setIsError(true);
-      }
-    }
-  };
-
-  const handleAssinar = async () => {
-    setIsCancelled(false);
-    setIsError(false);
-    
+  const enviarProposta = async () => {
     if (!account) {
       notify.error("Conecte sua carteira primeiro.");
       return;
     }
-
-    if (resolucaoCarteira.isResolving || resolucaoCarteira.status === "checking") {
-      notify.error("Aguarde a resolução da carteira do fornecedor.");
+    const quantidadeComprada = Number(quantidade);
+    if (!Number.isFinite(quantidadeComprada) || quantidadeComprada <= 0 || !safra || !tipoCafe) {
+      notify.error("Informe quantidade, safra e tipo de café.");
       return;
     }
 
-    const enderecoResolvido = resolucaoCarteira.carteira;
-
-    if (!resolucaoCarteira.isReady || !enderecoResolvido) {
-      notify.error("Por favor, insira um @username válido e cadastrado ou um endereço 0x...");
-      return;
+    let toastId: string | undefined;
+    try {
+      setPending(true);
+      toastId = notify.loading("Enviando proposta ao fornecedor...");
+      const response = await fetch("http://localhost:3001/propostas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          produtorWallet: account.address,
+          fornecedorWallet,
+          assetId,
+          quantidadeComprada,
+          safra,
+          tipoCafe,
+        }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.message ?? "Não foi possível enviar a proposta.");
+      setSuccess(true);
+      notify.success("Proposta enviada ao fornecedor.", toastId);
+    } catch (error) {
+      notify.fromError(error, toastId);
+    } finally {
+      setPending(false);
     }
-
-    const qtdSacas = BigInt(sacas);
-    if (qtdSacas <= BigInt(0)) {
-      notify.error("A quantidade de sacas deve ser maior que zero.");
-      return;
-    }
-
-    toast.custom((t) => (
-      <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-100 max-w-sm w-full animate-in zoom-in-95 duration-200">
-        <h3 className="font-bold text-gray-900 mb-2">Confirmar Proposta</h3>
-        <p className="text-gray-500 text-sm mb-6">Propor {qtdSacas.toString()} sacas de "{descricaoInsumo}" para {fornecedor} na blockchain?</p>
-        <div className="flex gap-3 justify-end">
-          <button 
-            onClick={() => {
-              toast.dismiss(t.id);
-              setIsCancelled(true);
-            }} 
-            className="px-4 py-2 text-sm font-semibold text-gray-500 hover:bg-gray-50 rounded-lg transition-colors"
-          >
-            Cancelar
-          </button>
-          <button 
-            onClick={() => {
-              toast.dismiss(t.id);
-              executarProposta(enderecoResolvido, qtdSacas);
-            }} 
-            className="px-4 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors shadow-sm"
-          >
-            Confirmar
-          </button>
-        </div>
-      </div>
-    ), { id: "confirmar-proposta", duration: Infinity, position: "top-center" });
   };
 
-  // --- Renderização Condicional de Status (UI/UX) ---
-  if (isSuccess) {
-    return (
-      <div className="bg-emerald-50 text-emerald-700 px-6 py-4 rounded-xl border border-emerald-200 flex items-center gap-3 font-semibold shadow-sm animate-in zoom-in duration-300">
-        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-        Proposta de CPR Enviada e Registrada na Blockchain!
-      </div>
-    );
+  if (success) {
+    return <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 font-semibold text-emerald-700">Proposta enviada e aguardando resposta.</div>;
   }
 
   return (
-    <div className="flex flex-col items-start gap-4 w-full">
-      <div className="w-full flex flex-col gap-3 p-4 bg-gray-50 rounded-2xl border border-gray-100">
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Carteira do Fornecedor</label>
-          <input
-            type="text"
-            placeholder="0x... ou @username"
-            value={fornecedor}
-            onChange={(e) => setFornecedor(e.target.value)}
-            className="w-full bg-white border border-gray-200 rounded-lg px-4 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          />
-          <p className={`mt-2 text-xs font-medium ${
-            resolucaoCarteira.status === "resolved" || resolucaoCarteira.status === "direct"
-              ? "text-emerald-700"
-              : resolucaoCarteira.status === "invalid" || resolucaoCarteira.status === "not_found" || resolucaoCarteira.status === "error"
-                ? "text-red-600"
-                : "text-gray-500"
-          }`}>
-            {resolucaoCarteira.mensagem}
-          </p>
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Qtd de Sacas</label>
-          <input
-            type="number"
-            min="1"
-            value={sacas}
-            onChange={(e) => setSacas(e.target.value)}
-            className="w-full bg-white border border-gray-200 rounded-lg px-4 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          />
-        </div>
+    <div className="w-full space-y-3 rounded-2xl border border-gray-100 bg-gray-50 p-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <input type="number" min="0.000001" step="any" value={quantidade} onChange={(e) => setQuantidade(e.target.value)} placeholder="Quantidade" className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900" />
+        <input value={safra} onChange={(e) => setSafra(e.target.value)} placeholder="Safra (2026/2027)" className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900" />
+        <input value={tipoCafe} onChange={(e) => setTipoCafe(e.target.value)} placeholder="Tipo de café" className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900" />
       </div>
-
-      <button
-        onClick={handleAssinar}
-        disabled={
-          isPending ||
-          resolucaoCarteira.isResolving ||
-          resolucaoCarteira.status === "checking" ||
-          resolucaoCarteira.status === "not_found" ||
-          !resolucaoCarteira.isReady ||
-          !resolucaoCarteira.carteira
-        }
-        className="relative w-full overflow-hidden group bg-emerald-900 hover:bg-emerald-950 text-white font-bold py-4 px-8 rounded-2xl shadow-lg transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center min-w-[300px]"
-      >
-        {isPending ? (
-          <div className="flex items-center gap-3">
-            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-            <span>Aguardando MetaMask...</span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3">
-            <span>Propor CPR (Assinar)</span>
-            <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
-          </div>
-        )}
+      <button onClick={enviarProposta} disabled={pending || !account} className="w-full rounded-xl bg-emerald-900 px-5 py-3 font-bold text-white hover:bg-emerald-950 disabled:cursor-wait disabled:opacity-70">
+        {pending ? "Enviando..." : `Fazer proposta (${precoSacas} sacas por unidade)`}
       </button>
-
-      {/* Alerta Amigável de Cancelamento */}
-      {isCancelled && !isPending && (
-        <div className="flex items-center gap-2 text-amber-600 bg-amber-50 px-4 py-2 rounded-lg border border-amber-200 text-sm font-medium w-full animate-in slide-in-from-top-2">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-          Ação cancelada.
-        </div>
-      )}
-
-      {/* Erro crítico não-esperado */}
-      {isError && !isCancelled && (
-        <p className="text-red-600 text-sm mt-1 font-medium bg-red-50 p-3 rounded-lg border border-red-100 w-full">
-          Erro inesperado na blockchain. Tente novamente.
-        </p>
-      )}
     </div>
   );
 }

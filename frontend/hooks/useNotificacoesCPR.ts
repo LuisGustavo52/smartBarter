@@ -1,19 +1,12 @@
-import { useState, useEffect } from "react";
-import { getContract, readContract, createThirdwebClient } from "thirdweb";
+import { useEffect, useState } from "react";
+import { createThirdwebClient, getContract, readContract } from "thirdweb";
 import { smartBarterLocalChain } from "@/lib/smartBarterChain";
 import { fetchRawEvents } from "@/lib/blockchain-queries";
 
-const client = createThirdwebClient({
-  clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "d3690d56bdafa6a3cd84d948259dbbe0",
-});
-
-const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
-
-const myContract = getContract({
-  client,
-  chain: smartBarterLocalChain,
-  address: CONTRACT_ADDRESS,
-});
+const API = "http://localhost:3001";
+const ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+const client = createThirdwebClient({ clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "d3690d56bdafa6a3cd84d948259dbbe0" });
+const contract = getContract({ client, chain: smartBarterLocalChain, address: ADDRESS });
 
 export interface Pendencia {
   id: string;
@@ -24,150 +17,53 @@ export interface Pendencia {
 }
 
 export function useNotificacoesCPR(accountAddress: string | undefined) {
-  const [total, setTotal] = useState(0); // Representa apenas o total de NÃO LIDAS
+  const [total, setTotal] = useState(0);
   const [detalhes, setDetalhes] = useState<Pendencia[]>([]);
   const [loading, setLoading] = useState(false);
 
   const marcarTodasComoLidas = () => {
     if (!accountAddress) return;
-    const lidasKey = `notificacoes_lidas_${accountAddress}`;
-    const currentIds = detalhes.map((p) => p.id);
-    localStorage.setItem(lidasKey, JSON.stringify(currentIds));
-    
-    setDetalhes((prev) => prev.map((p) => ({ ...p, isLida: true })));
+    localStorage.setItem(`notificacoes_lidas_${accountAddress}`, JSON.stringify(detalhes.map((item) => item.id)));
+    setDetalhes((items) => items.map((item) => ({ ...item, isLida: true })));
     setTotal(0);
   };
 
   useEffect(() => {
-    async function fetchNotificacoes() {
-      if (!accountAddress) {
-        setTotal(0);
-        setDetalhes([]);
-        return;
-      }
-
+    if (!accountAddress) {
+      setDetalhes([]);
+      setTotal(0);
+      return;
+    }
+    const carregar = async () => {
       setLoading(true);
       try {
-        const novasPendencias: Pendencia[] = [];
-
-        // 1. EVENTOS PROPOSTACRIADA
-        const propostasEvents = await fetchRawEvents(
-          myContract.address,
-          "event PropostaCriada(uint256 indexed propostaId, address indexed produtor, address indexed fornecedor, uint256 sacas, string insumo)"
-        );
-
-        for (const e of propostasEvents) {
-          const pId = (e.args as any).propostaId;
-          const isProdutor = (e.args as any).produtor?.toLowerCase() === accountAddress.toLowerCase();
-          const isFornecedor = (e.args as any).fornecedor?.toLowerCase() === accountAddress.toLowerCase();
-
-          if (pId !== undefined && (isProdutor || isFornecedor)) {
-            const p = await readContract({
-              contract: myContract,
-              method: "function propostas(uint256) view returns (address produtor, address fornecedor, uint256 sacas, string insumo, bool ativa, bool pendente, bool insumoConfirmado)",
-              params: [pId],
-            });
-
-            // Regra 1: Fornecedor - Propostas pendentes de aceite
-            if (isFornecedor && p[5] === true) {
-              novasPendencias.push({
-                id: `proposta_pendente_${pId}`,
-                tipo: "proposta_pendente_aceite",
-                mensagem: `Nova proposta #${pId} de ${p[3]} aguardando seu aceite.`,
-                link: "/hub/propostas",
-              });
-            }
-
-            // Regra 2: Produtor - Propostas aguardando confirmação de insumo
-            if (isProdutor && p[4] === true && p[6] === false) {
-              novasPendencias.push({
-                id: `aguardando_insumo_${pId}`,
-                tipo: "aguardando_insumo",
-                mensagem: `Proposta #${pId} de ${p[3]} aguarda que você confirme o recebimento do insumo.`,
-                link: "/hub/propostas",
-              });
-            }
+        const items: Pendencia[] = [];
+        const userResponse = await fetch(`${API}/users/wallet/${accountAddress}`);
+        const user = userResponse.ok ? await userResponse.json() : null;
+        if (user?.tipo_usuario === "FORNECEDOR") {
+          const response = await fetch(`${API}/propostas?fornecedorWallet=${accountAddress}&status=Pendente`);
+          if (response.ok) {
+            const propostas = await response.json();
+            propostas.forEach((proposta: { id: string; assets?: { nome: string } }) => items.push({ id: `proposta_${proposta.id}`, tipo: "proposta_pendente_aceite", mensagem: `Nova proposta de ${proposta.assets?.nome ?? "insumo"} aguardando aceite.`, link: "/hub/propostas" }));
           }
         }
-
-        // 2. EVENTOS CPREMITIDA
-        const cprEvents = await fetchRawEvents(
-          myContract.address,
-          "event CPREmitida(uint256 indexed tokenId, address indexed fornecedor, uint256 sacas, string insumo)"
-        );
-
-        for (const e of cprEvents) {
-          const tId = (e.args as any).tokenId;
-          const isFornecedor = (e.args as any).fornecedor?.toLowerCase() === accountAddress.toLowerCase();
-
-          if (tId !== undefined && isFornecedor) {
-            const p = await readContract({
-              contract: myContract,
-              method: "function propostas(uint256) view returns (address produtor, address fornecedor, uint256 sacas, string insumo, bool ativa, bool pendente, bool insumoConfirmado)",
-              params: [tId], // o tokenId é igual ao propostaId na lógica atual
-            });
-
-            // Regra 3: Fornecedor - CPRs ativas prontas pra liquidar
-            if (p[4] === true) {
-              novasPendencias.push({
-                id: `cpr_pronta_liquidar_${tId}`,
-                tipo: "cpr_pronta_liquidar",
-                mensagem: `Você tem uma CPR ativa #${tId} de ${p[3]} pronta para liquidação.`,
-                link: "/hub/meus-ativos",
-              });
-            }
-          }
+        const events = await fetchRawEvents(contract.address, "event CPREmitida(uint256 indexed tokenId, address indexed produtor, address indexed fornecedor, uint256 sacas, string insumo, string quantidadeInsumo, string safra, string tipoCafe, string idPropostaOffchain)");
+        for (const event of events) {
+          const tokenId = event.args.tokenId as bigint;
+          const cpr = await readContract({ contract, method: "function cprs(uint256) view returns (address produtor, address fornecedor, uint256 sacas, string insumo, string quantidadeInsumo, string safra, string tipoCafe, string idPropostaOffchain, bool aguardandoEntrega, bool entregue, bool liquidada)", params: [tokenId] }) as readonly [string, string, bigint, string, string, string, string, string, boolean, boolean, boolean];
+          if (cpr[0].toLowerCase() === accountAddress.toLowerCase() && cpr[8]) items.push({ id: `entrega_${tokenId}`, tipo: "aguardando_insumo", mensagem: `A CPR #${tokenId} aguarda confirmação de entrega.`, link: "/hub/propostas" });
+          if (cpr[1].toLowerCase() === accountAddress.toLowerCase() && cpr[9] && !cpr[10]) items.push({ id: `liquidar_${tokenId}`, tipo: "cpr_pronta_liquidar", mensagem: `A CPR #${tokenId} está pronta para liquidação.`, link: "/hub/propostas" });
         }
-
-        // --- Sincronização com LocalStorage (Lidas/Não Lidas e Cleanup) ---
-        const lidasKey = `notificacoes_lidas_${accountAddress}`;
-        const lidasRaw = localStorage.getItem(lidasKey);
-        let lidasSet = new Set<string>();
-        if (lidasRaw) {
-          try {
-            lidasSet = new Set(JSON.parse(lidasRaw));
-          } catch (e) {
-            console.error("Erro ao fazer parse do localStorage", e);
-          }
-        }
-
-        const currentIdsSet = new Set(novasPendencias.map((p) => p.id));
-        let hasChanges = false;
-        
-        // Remove IDs órfãos (que não existem mais ativamente na blockchain)
-        for (const id of lidasSet) {
-          if (!currentIdsSet.has(id)) {
-            lidasSet.delete(id);
-            hasChanges = true;
-          }
-        }
-
-        if (hasChanges) {
-          localStorage.setItem(lidasKey, JSON.stringify(Array.from(lidasSet)));
-        }
-
-        let naoLidasCount = 0;
-        const pendenciasFinais = novasPendencias.map((p) => {
-          const isLida = lidasSet.has(p.id);
-          if (!isLida) {
-            naoLidasCount++;
-          }
-          return { ...p, isLida };
-        });
-
-        setDetalhes(pendenciasFinais);
-        setTotal(naoLidasCount);
+        const lidas = new Set<string>(JSON.parse(localStorage.getItem(`notificacoes_lidas_${accountAddress}`) ?? "[]"));
+        setDetalhes(items.map((item) => ({ ...item, isLida: lidas.has(item.id) })));
+        setTotal(items.filter((item) => !lidas.has(item.id)).length);
       } catch (error) {
-        console.warn("Erro ao buscar notificações:", error);
+        console.warn("Erro ao carregar notificações:", error);
       } finally {
         setLoading(false);
       }
-    }
-
-    // Polling simples ou apenas busca on mount
-    fetchNotificacoes();
-    const intervalId = setInterval(fetchNotificacoes, 30000); // Atualiza a cada 30s
-    return () => clearInterval(intervalId);
+    };
+    carregar();
   }, [accountAddress]);
 
   return { total, detalhes, loading, marcarTodasComoLidas };
