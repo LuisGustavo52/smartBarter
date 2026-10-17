@@ -36,6 +36,7 @@ export class AssetsService {
         nome: dto.nome,
         descricao: dto.descricao,
         preco_sacas: dto.precoSacas,
+        unidade_medida: dto.unidadeMedida ?? 'unidade',
         fornecedor_wallet: dto.fornecedorWallet,
       })
       .select()
@@ -95,6 +96,7 @@ export class AssetsService {
       ...(dto.nome !== undefined && { nome: dto.nome }),
       ...(dto.descricao !== undefined && { descricao: dto.descricao }),
       ...(dto.precoSacas !== undefined && { preco_sacas: dto.precoSacas }),
+      ...(dto.unidadeMedida !== undefined && { unidade_medida: dto.unidadeMedida }),
       updated_at: new Date().toISOString(),
     };
     const { data, error } = await this.supabaseService

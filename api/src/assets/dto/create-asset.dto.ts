@@ -1,4 +1,4 @@
-import { IsNumber, IsString, Matches, Min } from 'class-validator';
+import { IsNumber, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
 
 export class CreateAssetDto {
   @IsString()
@@ -10,6 +10,11 @@ export class CreateAssetDto {
   @IsNumber()
   @Min(0)
   precoSacas: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  unidadeMedida?: string;
 
   @IsString()
   @Matches(/^0x[a-fA-F0-9]{40}$/)

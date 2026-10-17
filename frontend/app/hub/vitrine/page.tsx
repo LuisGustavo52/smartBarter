@@ -153,7 +153,7 @@ export default function VitrinePage() {
                       <div>
                         <div className="text-sm text-gray-500 font-medium mb-1">Preço em sacas de café</div>
                         <div className="text-2xl font-black text-gray-900">
-                        {Number(insumo.preco_sacas).toLocaleString('pt-BR')} sacas
+                          {Number(insumo.preco_sacas).toLocaleString('pt-BR')} sacas por {insumo.unidade_medida ?? "unidade"}
                         </div>
                       </div>
                       
@@ -161,7 +161,7 @@ export default function VitrinePage() {
                       {checkingProfile ? (
                         <span className="text-sm font-medium text-gray-500">Verificando perfil...</span>
                       ) : isProdutor ? (
-                        <BotaoAssinarAcordo assetId={insumo.id} fornecedorWallet={insumo.fornecedor_wallet} precoSacas={Number(insumo.preco_sacas)} />
+                        <BotaoAssinarAcordo assetId={insumo.id} fornecedorWallet={insumo.fornecedor_wallet} precoSacas={Number(insumo.preco_sacas)} unidadeMedida={insumo.unidade_medida} />
                       ) : (
                         <span className="text-sm font-medium text-gray-500">Apenas produtores podem fazer propostas.</span>
                       )}

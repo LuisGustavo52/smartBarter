@@ -1,4 +1,4 @@
-import { IsNumber, IsOptional, IsString, Matches, Min } from 'class-validator';
+import { IsNumber, IsOptional, IsString, Matches, MaxLength, Min } from 'class-validator';
 
 export class UpdateAssetDto {
   @IsString()
@@ -16,4 +16,9 @@ export class UpdateAssetDto {
   @IsNumber()
   @Min(0)
   precoSacas?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  unidadeMedida?: string;
 }
