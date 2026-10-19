@@ -161,7 +161,13 @@ export default function VitrinePage() {
                       {checkingProfile ? (
                         <span className="text-sm font-medium text-gray-500">Verificando perfil...</span>
                       ) : isProdutor ? (
-                        <BotaoAssinarAcordo assetId={insumo.id} fornecedorWallet={insumo.fornecedor_wallet} precoSacas={Number(insumo.preco_sacas)} unidadeMedida={insumo.unidade_medida} />
+                        <BotaoAssinarAcordo
+                          assetId={insumo.id}
+                          fornecedorWallet={insumo.fornecedor_wallet}
+                          precoSacas={Number(insumo.preco_sacas)}
+                          unidadeMedida={insumo.unidade_medida}
+                          nomeInsumo={insumo.nome}
+                        />
                       ) : (
                         <span className="text-sm font-medium text-gray-500">Apenas produtores podem fazer propostas.</span>
                       )}
