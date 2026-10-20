@@ -5,7 +5,9 @@ import { fetchRawEvents } from "@/lib/blockchain-queries";
 
 const API = "http://localhost:3001";
 const ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
-const client = createThirdwebClient({ clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "d3690d56bdafa6a3cd84d948259dbbe0" });
+const client = createThirdwebClient({
+  clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "d3690d56bdafa6a3cd84d948259dbbe0",
+});
 const contract = getContract({ client, chain: smartBarterLocalChain, address: ADDRESS });
 
 export interface Pendencia {
@@ -23,7 +25,8 @@ export function useNotificacoesCPR(accountAddress: string | undefined) {
 
   const marcarTodasComoLidas = () => {
     if (!accountAddress) return;
-    localStorage.setItem(`notificacoes_lidas_${accountAddress}`, JSON.stringify(detalhes.map((item) => item.id)));
+    const key = `notificacoes_lidas_${accountAddress.toLowerCase()}`;
+    localStorage.setItem(key, JSON.stringify(detalhes.map((item) => item.id)));
     setDetalhes((items) => items.map((item) => ({ ...item, isLida: true })));
     setTotal(0);
   };
@@ -34,36 +37,103 @@ export function useNotificacoesCPR(accountAddress: string | undefined) {
       setTotal(0);
       return;
     }
+
+    let isCancelled = false;
+    let isFirstLoad = true;
+
     const carregar = async () => {
-      setLoading(true);
+      if (isFirstLoad) {
+        setLoading(true);
+      }
       try {
         const items: Pendencia[] = [];
         const userResponse = await fetch(`${API}/users/wallet/${accountAddress}`);
-        const user = userResponse.ok ? await userResponse.json() : null;
-        if (user?.tipo_usuario === "FORNECEDOR") {
+        const payload = userResponse.ok ? await userResponse.json() : null;
+        const tipoUsuario = payload?.user?.tipo_usuario?.toUpperCase();
+
+        if (tipoUsuario === "FORNECEDOR") {
           const response = await fetch(`${API}/propostas?fornecedorWallet=${accountAddress}&status=Pendente`);
           if (response.ok) {
             const propostas = await response.json();
-            propostas.forEach((proposta: { id: string; assets?: { nome: string } }) => items.push({ id: `proposta_${proposta.id}`, tipo: "proposta_pendente_aceite", mensagem: `Nova proposta de ${proposta.assets?.nome ?? "insumo"} aguardando aceite.`, link: "/hub/propostas" }));
+            propostas.forEach((proposta: { id: string; assets?: { nome: string } }) =>
+              items.push({
+                id: `proposta_${proposta.id}`,
+                tipo: "proposta_pendente_aceite",
+                mensagem: `Nova proposta de ${proposta.assets?.nome ?? "insumo"} aguardando aceite.`,
+                link: "/hub/propostas",
+              })
+            );
           }
         }
-        const events = await fetchRawEvents(contract.address, "event CPREmitida(uint256 indexed tokenId, address indexed produtor, address indexed fornecedor, uint256 sacas, string insumo, string quantidadeInsumo, string safra, string tipoCafe, string idPropostaOffchain)");
+
+        const events = await fetchRawEvents(
+          contract.address,
+          "event CPREmitida(uint256 indexed tokenId, address indexed produtor, address indexed fornecedor, uint256 sacas, string insumo, string quantidadeInsumo, string safra, string tipoCafe, string idPropostaOffchain)"
+        );
+
         for (const event of events) {
           const tokenId = event.args.tokenId as bigint;
-          const cpr = await readContract({ contract, method: "function cprs(uint256) view returns (address produtor, address fornecedor, uint256 sacas, string insumo, string quantidadeInsumo, string safra, string tipoCafe, string idPropostaOffchain, bool aguardandoEntrega, bool entregue, bool liquidada)", params: [tokenId] }) as readonly [string, string, bigint, string, string, string, string, string, boolean, boolean, boolean];
-          if (cpr[0].toLowerCase() === accountAddress.toLowerCase() && cpr[8]) items.push({ id: `entrega_${tokenId}`, tipo: "aguardando_insumo", mensagem: `A CPR #${tokenId} aguarda confirmação de entrega.`, link: "/hub/propostas" });
-          if (cpr[1].toLowerCase() === accountAddress.toLowerCase() && cpr[9] && !cpr[10]) items.push({ id: `liquidar_${tokenId}`, tipo: "cpr_pronta_liquidar", mensagem: `A CPR #${tokenId} está pronta para liquidação.`, link: "/hub/propostas" });
+          const cpr = (await readContract({
+            contract,
+            method:
+              "function cprs(uint256) view returns (address produtor, address fornecedor, uint256 sacas, string insumo, string quantidadeInsumo, string safra, string tipoCafe, string idPropostaOffchain, bool aguardandoEntrega, bool entregue, bool liquidada)",
+            params: [tokenId],
+          })) as readonly [
+            string,
+            string,
+            bigint,
+            string,
+            string,
+            string,
+            string,
+            string,
+            boolean,
+            boolean,
+            boolean
+          ];
+
+          const idOffchain = cpr[7] || tokenId.toString();
+          if (cpr[0].toLowerCase() === accountAddress.toLowerCase() && cpr[8]) {
+            items.push({
+              id: `entrega_${idOffchain}`,
+              tipo: "aguardando_insumo",
+              mensagem: `A CPR #${tokenId} aguarda confirmação de entrega.`,
+              link: "/hub/propostas",
+            });
+          }
+          if (cpr[1].toLowerCase() === accountAddress.toLowerCase() && cpr[9] && !cpr[10]) {
+            items.push({
+              id: `liquidar_${idOffchain}`,
+              tipo: "cpr_pronta_liquidar",
+              mensagem: `A CPR #${tokenId} está pronta para liquidação.`,
+              link: "/hub/propostas",
+            });
+          }
         }
-        const lidas = new Set<string>(JSON.parse(localStorage.getItem(`notificacoes_lidas_${accountAddress}`) ?? "[]"));
+
+        if (isCancelled) return;
+
+        const key = `notificacoes_lidas_${accountAddress.toLowerCase()}`;
+        const lidas = new Set<string>(JSON.parse(localStorage.getItem(key) ?? "[]"));
         setDetalhes(items.map((item) => ({ ...item, isLida: lidas.has(item.id) })));
         setTotal(items.filter((item) => !lidas.has(item.id)).length);
       } catch (error) {
         console.warn("Erro ao carregar notificações:", error);
       } finally {
-        setLoading(false);
+        if (!isCancelled && isFirstLoad) {
+          setLoading(false);
+          isFirstLoad = false;
+        }
       }
     };
+
     carregar();
+    const intervalId = setInterval(carregar, 30000);
+
+    return () => {
+      isCancelled = true;
+      clearInterval(intervalId);
+    };
   }, [accountAddress]);
 
   return { total, detalhes, loading, marcarTodasComoLidas };
