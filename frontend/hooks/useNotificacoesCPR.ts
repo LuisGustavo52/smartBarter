@@ -2,13 +2,13 @@ import { useEffect, useState } from "react";
 import { createThirdwebClient, getContract, readContract } from "thirdweb";
 import { smartBarterLocalChain } from "@/lib/smartBarterChain";
 import { fetchRawEvents } from "@/lib/blockchain-queries";
+import { CONTRACT_ADDRESS } from "@/lib/config";
 
 const API = "http://localhost:3001";
-const ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 const client = createThirdwebClient({
   clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "d3690d56bdafa6a3cd84d948259dbbe0",
 });
-const contract = getContract({ client, chain: smartBarterLocalChain, address: ADDRESS });
+const contract = getContract({ client, chain: smartBarterLocalChain, address: CONTRACT_ADDRESS });
 
 export interface Pendencia {
   id: string;

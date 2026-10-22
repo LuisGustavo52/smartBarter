@@ -8,6 +8,7 @@ import { useActiveAccount } from "thirdweb/react";
 import { createThirdwebClient, getContract } from "thirdweb";
 import { smartBarterLocalChain } from "@/lib/smartBarterChain";
 import { carregarCprs, Cpr } from "@/lib/cprs";
+import { CONTRACT_ADDRESS } from "@/lib/config";
 import BotaoLiquidarCPR from "@/components/BotaoLiquidarCPR";
 import UsuarioDisplay from "@/components/UsuarioDisplay";
 import { notify } from "@/lib/notify";
@@ -16,8 +17,6 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "rec
 const client = createThirdwebClient({
   clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "d3690d56bdafa6a3cd84d948259dbbe0",
 });
-
-const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 
 const myContract = getContract({
   client,

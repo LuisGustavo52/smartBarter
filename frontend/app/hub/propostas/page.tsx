@@ -10,9 +10,9 @@ import ReputacaoEstrelas from "@/components/ReputacaoEstrelas";
 import BotaoConfirmarInsumo from "@/components/BotaoConfirmarInsumo";
 import BotaoLiquidarCPR from "@/components/BotaoLiquidarCPR";
 import { notify } from "@/lib/notify";
+import { CONTRACT_ADDRESS } from "@/lib/config";
 
 const API_BASE_URL = "http://localhost:3001";
-const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 const client = createThirdwebClient({ clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "d3690d56bdafa6a3cd84d948259dbbe0" });
 const contract = getContract({ client, chain: smartBarterLocalChain, address: CONTRACT_ADDRESS });
 const EVENT_SIGNATURE = "event CPREmitida(uint256 indexed tokenId, address indexed produtor, address indexed fornecedor, uint256 sacas, string insumo, string quantidadeInsumo, string safra, string tipoCafe, string idPropostaOffchain)";
