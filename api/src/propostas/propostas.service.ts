@@ -9,10 +9,14 @@ import { SupabaseService } from '../supabase/supabase.service';
 import { CreatePropostaDto } from './dto/create-proposta.dto';
 import { StatusProposta, UpdatePropostaStatusDto } from './dto/update-proposta-status.dto';
 import { calcularSacas } from './calculo-sacas';
+import { HistoricoService, EventoHistorico } from '../historico/historico.service';
 
 @Injectable()
 export class PropostasService {
-  constructor(private readonly supabaseService: SupabaseService) {}
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly historicoService: HistoricoService,
+  ) {}
 
   private async ensureUser(wallet: string, type: 'PRODUTOR' | 'FORNECEDOR') {
     const { data, error } = await this.supabaseService
@@ -34,7 +38,7 @@ export class PropostasService {
     const { data: asset, error: assetError } = await this.supabaseService
       .getClient()
       .from('assets')
-      .select('id, tipo_ativo, fornecedor_wallet, preco_sacas')
+      .select('id, tipo_ativo, fornecedor_wallet, preco_sacas, nome, unidade_medida')
       .eq('id', dto.assetId)
       .eq('tipo_ativo', 'INSUMO')
       .maybeSingle();
@@ -69,6 +73,28 @@ export class PropostasService {
       .select()
       .single();
     if (error) throw new InternalServerErrorException('Erro ao criar a proposta.');
+
+    await this.historicoService.registrar({
+      evento: 'PROPOSTA_CRIADA',
+      ocorridoEm: new Date(data.created_at),
+      propostaId: data.id,
+      produtorWallet: dto.produtorWallet,
+      fornecedorWallet: dto.fornecedorWallet,
+      atorWallet: dto.produtorWallet,
+      sacas: calculo.sacasCpr,
+      snapshot: {
+        assetId: dto.assetId,
+        insumo: asset.nome,
+        unidadeMedida: asset.unidade_medida,
+        quantidadeComprada: dto.quantidadeComprada,
+        precoUnitarioSacas: asset.preco_sacas,
+        totalSacas: calculo.totalSacas,
+        sacasCpr: calculo.sacasCpr,
+        safra: dto.safra,
+        tipoCafe: dto.tipoCafe,
+      },
+    });
+
     return data;
   }
 
@@ -128,6 +154,31 @@ export class PropostasService {
       .maybeSingle();
     if (error) throw new InternalServerErrorException('Erro ao atualizar proposta.');
     if (!data) throw new ConflictException('A proposta foi alterada por outra operação.');
+
+    const evento: EventoHistorico =
+      dto.status === StatusProposta.ACEITA ? 'PROPOSTA_ACEITA' : 'PROPOSTA_RECUSADA';
+
+    await this.historicoService.registrar({
+      evento,
+      ocorridoEm: new Date(data.updated_at),
+      propostaId: id,
+      produtorWallet: proposta.produtor_wallet,
+      fornecedorWallet: proposta.fornecedor_wallet,
+      atorWallet: dto.fornecedorWallet,
+      tokenId: dto.status === StatusProposta.ACEITA ? dto.tokenId : undefined,
+      sacas: proposta.sacas_cpr,
+      snapshot: {
+        status: dto.status,
+        insumo: proposta.assets?.nome,
+        unidadeMedida: proposta.assets?.unidade_medida,
+        quantidadeComprada: proposta.quantidade_comprada,
+        totalSacas: proposta.total_sacas,
+        precoUnitarioSacas: proposta.preco_unitario_sacas,
+        safra: proposta.safra,
+        tipoCafe: proposta.tipo_cafe,
+      },
+    });
+
     return data;
   }
 }
