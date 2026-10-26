@@ -109,7 +109,9 @@ export class HistoricoService {
         if (error.code === '23505') {
           return;
         }
-        this.logger.error(`Erro ao registrar histórico off-chain: ${error.message}`);
+        this.logger.error(
+          `Erro ao registrar histórico off-chain: ${error.message} (code: ${error.code})`,
+        );
       }
     } catch (err: any) {
       this.logger.error(`Exceção ao registrar histórico off-chain: ${err?.message ?? err}`);
@@ -131,8 +133,43 @@ export class HistoricoService {
       });
 
     if (error) {
-      this.logger.error(`Erro ao registrar histórico on-chain: ${error.message}`);
+      this.logger.error(
+        `Erro ao registrar histórico on-chain: ${error.message} (code: ${error.code})`,
+      );
       throw error;
+    }
+  }
+
+  async ultimoBlocoDoEpoch(chainEpoch: string): Promise<bigint | null> {
+    try {
+      const { data, error } = await this.supabaseService
+        .getClient()
+        .from('historico_transacoes')
+        .select('block_number')
+        .eq('chain_epoch', chainEpoch)
+        .order('block_number', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        this.logger.error(
+          `Erro ao consultar último bloco do epoch: ${error.message} (code: ${error.code})`,
+        );
+        return null;
+      }
+
+      if (
+        !data ||
+        data.length === 0 ||
+        data[0].block_number === null ||
+        data[0].block_number === undefined
+      ) {
+        return null;
+      }
+
+      return BigInt(String(data[0].block_number));
+    } catch (err: any) {
+      this.logger.error(`Exceção ao consultar último bloco do epoch: ${err?.message ?? err}`);
+      return null;
     }
   }
 
@@ -164,7 +201,9 @@ export class HistoricoService {
 
     const { data, error } = await query;
     if (error) {
-      this.logger.error(`Erro ao listar histórico: ${error.message}`);
+      this.logger.error(
+        `Erro ao listar histórico: ${error.message} (code: ${error.code})`,
+      );
       throw new InternalServerErrorException('Erro ao consultar histórico de transações.');
     }
 

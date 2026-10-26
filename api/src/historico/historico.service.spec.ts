@@ -17,6 +17,7 @@ describe('HistoricoService', () => {
       or: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),
       order: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockResolvedValue({ data: [], error: null }),
       range: jest.fn().mockResolvedValue({ data: [], error: null }),
     };
 
@@ -166,7 +167,7 @@ describe('HistoricoService', () => {
     });
 
     it('deve lançar erro se o upsert falhar', async () => {
-      const err = new Error('Falha no banco de dados');
+      const err = { message: 'Falha no banco de dados', code: '42P01' };
       queryBuilderMock.upsert.mockResolvedValueOnce({
         data: null,
         error: err,
@@ -182,7 +183,42 @@ describe('HistoricoService', () => {
             logIndex: 1,
           },
         ]),
-      ).rejects.toThrow(err);
+      ).rejects.toEqual(err);
+    });
+  });
+
+  describe('ultimoBlocoDoEpoch()', () => {
+    it('deve retornar null se não houver linhas registradas', async () => {
+      queryBuilderMock.limit.mockResolvedValueOnce({
+        data: [],
+        error: null,
+      });
+
+      const res = await service.ultimoBlocoDoEpoch('0xepoch123');
+      expect(res).toBeNull();
+      expect(queryBuilderMock.eq).toHaveBeenCalledWith('chain_epoch', '0xepoch123');
+      expect(queryBuilderMock.order).toHaveBeenCalledWith('block_number', { ascending: false });
+      expect(queryBuilderMock.limit).toHaveBeenCalledWith(1);
+    });
+
+    it('deve converter block_number retornado para BigInt', async () => {
+      queryBuilderMock.limit.mockResolvedValueOnce({
+        data: [{ block_number: '42' }],
+        error: null,
+      });
+
+      const res = await service.ultimoBlocoDoEpoch('0xepoch123');
+      expect(res).toBe(42n);
+    });
+
+    it('deve retornar null em caso de erro no banco de dados', async () => {
+      queryBuilderMock.limit.mockResolvedValueOnce({
+        data: null,
+        error: { message: 'timeout', code: '57014' },
+      });
+
+      const res = await service.ultimoBlocoDoEpoch('0xepoch123');
+      expect(res).toBeNull();
     });
   });
 
