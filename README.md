@@ -22,7 +22,7 @@ Crie ou edite o arquivo `api/.env` na raiz da pasta `api/`:
 - `SUPABASE_URL`: URL do seu projeto no Supabase (obrigatória).
 - `SUPABASE_KEY`: Chave pública `anon` do Supabase (obrigatória).
 - `CONTRACT_ADDRESS`: Endereço do contrato `SmartBarterCPR` implantado na rede local. **Atualizada automaticamente pelo `resetup.sh`**.
-- `AMBIENTE`: Identificador obrigatório do ambiente por desenvolvedor (ex.: `pedro` ou `luis`). Permite distinguir os dados e eventos em bancos compartilhados.
+- `AMBIENTE`: Identificador obrigatório do ambiente por desenvolvedor (ex.: `pedro` ou `luis`). Permite distinguir os dados e eventos em bancos compartilhados. Se ausente, a API grava `local` e registra um aviso no log.
 - `RPC_URL`: URL do nó RPC da blockchain local. Opcional (padrão no código: `http://127.0.0.1:8545`).
 - Outros parâmetros com padrões já definidos no código: `PORT=3001`, `THIRDWEB_CLIENT_ID=d3690d56bdafa6a3cd84d948259dbbe0`, `DOMAIN=localhost:3000`.
 
@@ -37,6 +37,8 @@ Variáveis disponíveis em `frontend/.env.local`:
 - `NEXT_PUBLIC_RPC_URL`: URL RPC do nó local Hardhat (padrão: `http://127.0.0.1:8545`).
 - `NEXT_PUBLIC_THIRDWEB_CLIENT_ID`: Client ID do Thirdweb (padrão: `d3690d56bdafa6a3cd84d948259dbbe0`).
 - `NEXT_PUBLIC_DOMAIN`: Domínio do frontend (padrão: `localhost:3000`).
+
+> **Nota**: `frontend/lib/config.ts` centraliza estas variáveis, mas a adoção em todas as telas ainda está em andamento (card "Refatoração .env e scripts"). Hoje o único valor que o `resetup.sh` altera é `NEXT_PUBLIC_CONTRACT_ADDRESS`.
 
 ---
 
@@ -82,10 +84,12 @@ npm run dev
 ### Contas de teste (MetaMask)
 
 Carteiras configuradas em `backend/scripts/wallets.json` e financiadas automaticamente pelo `resetup.sh`:
-- **Produtor (Fazenda Ouvidor)**: `0xe65A778F7eB4943662f51ee3A8bDDe06678805D0`
-- **Fornecedor 1 (Rep. Bayer)**: `0x6c3E116F3C4F6F308ba124c51C91c29D7a784103`
-- **Fornecedor 2 (Account 2)**: `0xa7dA2AC872Ea65f2db408a0a9Cadf04206E39001`
-- **Produtor 2 (Account 1)**: `0x009805DBE4F5BeeC5a154C0Ce2B7df1695aa5b2a`
+- `0xe65A778F7eB4943662f51ee3A8bDDe06678805D0`: nos testes atuais é o **Fornecedor** (`@fazenda_bitencourt`). Rótulo no `wallets.json`: "Produtor (Fazenda Ouvidor)".
+- `0x6c3E116F3C4F6F308ba124c51C91c29D7a784103`: rótulo no `wallets.json`: "Fornecedor 1 (Rep. Bayer)".
+- `0xa7dA2AC872Ea65f2db408a0a9Cadf04206E39001`: rótulo no `wallets.json`: "Fornecedor 2 (Account 2)".
+- `0x009805DBE4F5BeeC5a154C0Ce2B7df1695aa5b2a`: nos testes atuais é o **Produtor** ("Account 1").
+
+O papel de cada carteira (produtor ou fornecedor) é definido no cadastro do usuário, não pelo `wallets.json`; os rótulos do arquivo só aparecem na saída do `resetup.sh`.
 
 **Configuração da Rede na MetaMask**:
 - **Nome da Rede**: Localhost 8545
@@ -126,6 +130,8 @@ As migrações SQL ficam em `api/supabase/migrations/`:
 ### Como aplicar
 As migrations devem ser aplicadas **manualmente**, em ordem cronológica, pelo **SQL Editor do Supabase Dashboard**.
 > **IMPORTANTE**: **NÃO** utilize `supabase db push`.
+>
+> **ATENÇÃO**: a migration `20261014190000_reset_catalogo_propostas.sql` remove e recria as tabelas `assets` e `propostas` (`drop table ... cascade`), apagando seus dados. **Não a reaplique** no banco compartilhado, que já a recebeu. A tabela `historico_transacoes` não tem chaves estrangeiras e não é afetada por esse reset.
 
 ### Tabela `historico_transacoes` e Políticas RLS
 - **Estrutura append-only**: A tabela é estritamente de inclusão, sem chaves estrangeiras (`foreign keys`), para garantir que sobreviva a resets do Hardhat e truncamento de tabelas de propostas ou ativos. Triggers de banco bloqueiam qualquer operação de `UPDATE`, `DELETE` ou `TRUNCATE`.
@@ -139,7 +145,7 @@ As migrations devem ser aplicadas **manualmente**, em ordem cronológica, pelo *
 ### O Problema
 Em ambiente de desenvolvimento, a blockchain Hardhat executa em memória e é zerada sempre que o processo é reiniciado. Quando isso ocorre:
 - O número de bloco volta a 0.
-- Os `tokenId` das CPRs começam a ser gerados novamente a partir de 1.
+- Os `tokenId` das CPRs começam a ser gerados novamente a partir de 0.
 - Contratos emitidos em sessões anteriores perdem o vínculo ou colidem com IDs da nova sessão.
 
 ### A Solução
