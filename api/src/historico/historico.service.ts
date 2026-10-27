@@ -38,6 +38,13 @@ export interface ConsultaHistoricoParams {
   offset: number;
 }
 
+export interface EventoReputacaoLinha {
+  evento: EventoHistorico;
+  proposta_id: string | null;
+  chain_epoch: string | null;
+  token_id: string | number | null;
+}
+
 @Injectable()
 export class HistoricoService {
   private readonly logger = new Logger(HistoricoService.name);
@@ -208,5 +215,52 @@ export class HistoricoService {
     }
 
     return data ?? [];
+  }
+
+  async eventosParaReputacao(
+    fornecedorWallet: string,
+  ): Promise<EventoReputacaoLinha[]> {
+    const carteira = fornecedorWallet.toLowerCase();
+    const eventosFiltro = [
+      'PROPOSTA_ACEITA',
+      'PROPOSTA_RECUSADA',
+      'CPR_EMITIDA',
+      'CPR_LIQUIDADA',
+    ];
+
+    const todosEventos: EventoReputacaoLinha[] = [];
+    const TAMANHO_PAGINA = 1000;
+    let offset = 0;
+
+    while (true) {
+      const { data, error } = await this.supabaseService
+        .getClient()
+        .from('historico_transacoes')
+        .select('evento, proposta_id, chain_epoch, token_id')
+        .eq('fornecedor_wallet', carteira)
+        .in('evento', eventosFiltro)
+        .order('id', { ascending: true })
+        .range(offset, offset + TAMANHO_PAGINA - 1);
+
+      if (error) {
+        this.logger.error(
+          `Erro ao consultar eventos para reputação: ${error.message} (code: ${error.code})`,
+        );
+        throw new InternalServerErrorException(
+          'Erro ao consultar o histórico para a reputação.',
+        );
+      }
+
+      const linhas = (data as EventoReputacaoLinha[]) ?? [];
+      todosEventos.push(...linhas);
+
+      if (linhas.length < TAMANHO_PAGINA) {
+        break;
+      }
+
+      offset += TAMANHO_PAGINA;
+    }
+
+    return todosEventos;
   }
 }

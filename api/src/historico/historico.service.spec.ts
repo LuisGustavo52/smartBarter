@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { InternalServerErrorException } from '@nestjs/common';
 import { HistoricoService, NovoRegistroHistorico } from './historico.service';
 import { SupabaseService } from '../supabase/supabase.service';
 
@@ -16,6 +17,7 @@ describe('HistoricoService', () => {
       select: jest.fn().mockReturnThis(),
       or: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),
+      in: jest.fn().mockReturnThis(),
       order: jest.fn().mockReturnThis(),
       limit: jest.fn().mockResolvedValue({ data: [], error: null }),
       range: jest.fn().mockResolvedValue({ data: [], error: null }),
@@ -252,6 +254,76 @@ describe('HistoricoService', () => {
       expect(queryBuilderMock.eq).toHaveBeenCalledWith('evento', 'CPR_EMITIDA');
       expect(queryBuilderMock.eq).toHaveBeenCalledWith('ambiente', 'local');
       expect(queryBuilderMock.range).toHaveBeenCalledWith(0, 99);
+    });
+  });
+
+  describe('eventosParaReputacao()', () => {
+    it('usa a carteira em minúsculas e o filtro de eventos', async () => {
+      const wallet = '0xABC123DEF456789012345678901234567890ABCD';
+      const wLower = wallet.toLowerCase();
+
+      queryBuilderMock.range.mockResolvedValueOnce({
+        data: [
+          {
+            evento: 'PROPOSTA_ACEITA',
+            proposta_id: 'prop-1',
+            chain_epoch: null,
+            token_id: null,
+          },
+        ],
+        error: null,
+      });
+
+      const res = await service.eventosParaReputacao(wallet);
+
+      expect(queryBuilderMock.eq).toHaveBeenCalledWith('fornecedor_wallet', wLower);
+      expect(queryBuilderMock.in).toHaveBeenCalledWith('evento', [
+        'PROPOSTA_ACEITA',
+        'PROPOSTA_RECUSADA',
+        'CPR_EMITIDA',
+        'CPR_LIQUIDADA',
+      ]);
+      expect(queryBuilderMock.range).toHaveBeenCalledWith(0, 999);
+      expect(res).toHaveLength(1);
+    });
+
+    it('pagina quando o lote vem cheio (1000 linhas)', async () => {
+      const loteCheio = Array.from({ length: 1000 }, (_, i) => ({
+        evento: 'CPR_EMITIDA',
+        proposta_id: `prop-${i}`,
+        chain_epoch: 'epoch-1',
+        token_id: i,
+      }));
+
+      const loteFinal = [
+        {
+          evento: 'CPR_LIQUIDADA',
+          proposta_id: 'prop-1001',
+          chain_epoch: 'epoch-1',
+          token_id: 1001,
+        },
+      ];
+
+      queryBuilderMock.range
+        .mockResolvedValueOnce({ data: loteCheio, error: null })
+        .mockResolvedValueOnce({ data: loteFinal, error: null });
+
+      const res = await service.eventosParaReputacao('0xfornecedor');
+
+      expect(queryBuilderMock.range).toHaveBeenNthCalledWith(1, 0, 999);
+      expect(queryBuilderMock.range).toHaveBeenNthCalledWith(2, 1000, 1999);
+      expect(res).toHaveLength(1001);
+    });
+
+    it('lança InternalServerErrorException em erro', async () => {
+      queryBuilderMock.range.mockResolvedValueOnce({
+        data: null,
+        error: { message: 'db failure', code: '500' },
+      });
+
+      await expect(
+        service.eventosParaReputacao('0xfornecedor'),
+      ).rejects.toThrow(InternalServerErrorException);
     });
   });
 });
