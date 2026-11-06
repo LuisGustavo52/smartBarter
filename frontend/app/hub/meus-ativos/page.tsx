@@ -12,6 +12,12 @@ import { CONTRACT_ADDRESS } from "@/lib/config";
 import BotaoLiquidarCPR from "@/components/BotaoLiquidarCPR";
 import UsuarioDisplay from "@/components/UsuarioDisplay";
 import { notify } from "@/lib/notify";
+import {
+  UNIDADES_VENDA,
+  TIPOS_CAFE,
+  SAFRAS_CAFE,
+  QUALIDADES_CAFE,
+} from "@/lib/cafe-options";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 const client = createThirdwebClient({
@@ -30,6 +36,9 @@ interface Insumo {
   descricao: string;
   preco_sacas: number;
   unidade_medida: string;
+  tipo_cafe?: string | null;
+  safra?: string | null;
+  qualidade?: string | null;
   fornecedor_wallet: string;
   created_at: string;
 }
@@ -54,6 +63,9 @@ export default function MeusAtivosPage() {
     descricao: "",
     precoSacas: "",
     unidadeMedida: "",
+    tipoCafe: "",
+    safra: "",
+    qualidade: "",
   });
   const [salvandoInsumo, setSalvandoInsumo] = useState(false);
 
@@ -171,6 +183,9 @@ export default function MeusAtivosPage() {
       descricao: insumo.descricao,
       precoSacas: String(insumo.preco_sacas),
       unidadeMedida: insumo.unidade_medida,
+      tipoCafe: insumo.tipo_cafe ?? "",
+      safra: insumo.safra ?? "",
+      qualidade: insumo.qualidade ?? "",
     });
   };
 
@@ -211,16 +226,21 @@ export default function MeusAtivosPage() {
       setSalvandoInsumo(true);
       toastId = notify.loading("Salvando insumo...");
 
+      const payload: Record<string, unknown> = {
+        fornecedorWallet: account.address,
+        nome: formEdit.nome.trim(),
+        descricao: formEdit.descricao.trim(),
+        precoSacas: preco,
+        unidadeMedida: formEdit.unidadeMedida.trim().slice(0, 40),
+        tipoCafe: formEdit.tipoCafe.trim(),
+        safra: formEdit.safra.trim(),
+        qualidade: formEdit.qualidade.trim(),
+      };
+
       const res = await fetch(`http://localhost:3001/assets/${insumoEditando.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fornecedorWallet: account.address,
-          nome: formEdit.nome.trim(),
-          descricao: formEdit.descricao.trim(),
-          precoSacas: preco,
-          unidadeMedida: formEdit.unidadeMedida.trim().slice(0, 40),
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -798,14 +818,88 @@ export default function MeusAtivosPage() {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Unidade de Venda
                   </label>
-                  <input
-                    type="text"
-                    maxLength={40}
+                  <select
                     required
                     value={formEdit.unidadeMedida}
                     onChange={(e) => setFormEdit({ ...formEdit, unidadeMedida: e.target.value })}
                     className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all text-gray-900 font-medium"
-                  />
+                  >
+                    {!UNIDADES_VENDA.includes(formEdit.unidadeMedida as any) &&
+                      formEdit.unidadeMedida && (
+                        <option value={formEdit.unidadeMedida}>{formEdit.unidadeMedida}</option>
+                      )}
+                    {UNIDADES_VENDA.map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Tipo de café (opcional)
+                    </label>
+                    <select
+                      value={formEdit.tipoCafe}
+                      onChange={(e) => setFormEdit({ ...formEdit, tipoCafe: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all text-gray-900 font-medium text-sm"
+                    >
+                      <option value="">Não especificado</option>
+                      {!TIPOS_CAFE.includes(formEdit.tipoCafe as any) && formEdit.tipoCafe && (
+                        <option value={formEdit.tipoCafe}>{formEdit.tipoCafe}</option>
+                      )}
+                      {TIPOS_CAFE.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Safra (opcional)
+                    </label>
+                    <select
+                      value={formEdit.safra}
+                      onChange={(e) => setFormEdit({ ...formEdit, safra: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all text-gray-900 font-medium text-sm"
+                    >
+                      <option value="">Não especificado</option>
+                      {!SAFRAS_CAFE.includes(formEdit.safra as any) && formEdit.safra && (
+                        <option value={formEdit.safra}>{formEdit.safra}</option>
+                      )}
+                      {SAFRAS_CAFE.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Qualidade (opcional)
+                    </label>
+                    <select
+                      value={formEdit.qualidade}
+                      onChange={(e) => setFormEdit({ ...formEdit, qualidade: e.target.value })}
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all text-gray-900 font-medium text-sm"
+                    >
+                      <option value="">Não especificado</option>
+                      {!QUALIDADES_CAFE.includes(formEdit.qualidade as any) &&
+                        formEdit.qualidade && (
+                          <option value={formEdit.qualidade}>{formEdit.qualidade}</option>
+                        )}
+                      {QUALIDADES_CAFE.map((q) => (
+                        <option key={q} value={q}>
+                          {q}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 text-xs text-emerald-900">

@@ -6,6 +6,12 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import UsuarioDisplay from "@/components/UsuarioDisplay";
 import { notify } from "@/lib/notify";
+import {
+  UNIDADES_VENDA,
+  TIPOS_CAFE,
+  SAFRAS_CAFE,
+  QUALIDADES_CAFE,
+} from "@/lib/cafe-options";
 
 function NovoAtivoDashboard() {
   const router = useRouter();
@@ -38,6 +44,9 @@ function NovoAtivoDashboard() {
     descricao: "",
     unidadeMedida: "unidade",
     precoSacas: "",
+    tipoCafe: "",
+    safra: "",
+    qualidade: "",
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -58,16 +67,21 @@ function NovoAtivoDashboard() {
     let toastId;
     try {
       toastId = notify.loading("Cadastrando insumo...");
+      const payload: Record<string, unknown> = {
+        nome: formData.nome,
+        descricao: formData.descricao,
+        precoSacas: Number(formData.precoSacas),
+        unidadeMedida: formData.unidadeMedida.trim(),
+        fornecedorWallet: account.address,
+      };
+      if (formData.tipoCafe.trim()) payload.tipoCafe = formData.tipoCafe.trim();
+      if (formData.safra.trim()) payload.safra = formData.safra.trim();
+      if (formData.qualidade.trim()) payload.qualidade = formData.qualidade.trim();
+
       const response = await fetch("http://localhost:3001/assets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nome: formData.nome,
-          descricao: formData.descricao,
-          precoSacas: Number(formData.precoSacas),
-          unidadeMedida: formData.unidadeMedida.trim(),
-          fornecedorWallet: account.address,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -189,24 +203,23 @@ function NovoAtivoDashboard() {
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Unidade de Venda</label>
-              <input
-                type="text"
+              <select
                 name="unidadeMedida"
                 required
-                maxLength={40}
-                list="unidades-sugeridas"
                 value={formData.unidadeMedida}
                 onChange={handleChange}
-                placeholder="Ex: saco 50 kg"
                 className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all text-gray-900 font-medium"
-              />
-              <datalist id="unidades-sugeridas">
-                <option value="unidade" />
-                <option value="saco 50 kg" />
-                <option value="litro" />
-                <option value="tonelada" />
-                <option value="galão" />
-              </datalist>
+              >
+                {!UNIDADES_VENDA.includes(formData.unidadeMedida as any) &&
+                  formData.unidadeMedida && (
+                    <option value={formData.unidadeMedida}>{formData.unidadeMedida}</option>
+                  )}
+                {UNIDADES_VENDA.map((u) => (
+                  <option key={u} value={u}>
+                    {u}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -240,6 +253,65 @@ function NovoAtivoDashboard() {
               <span className="absolute inset-y-0 right-0 flex items-center pr-5 text-gray-400 font-semibold pointer-events-none">
                 sacas
               </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Tipo de café (opcional)
+              </label>
+              <select
+                name="tipoCafe"
+                value={formData.tipoCafe}
+                onChange={handleChange}
+                className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all text-gray-900 font-medium"
+              >
+                <option value="">Não especificado</option>
+                {TIPOS_CAFE.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Safra (opcional)
+              </label>
+              <select
+                name="safra"
+                value={formData.safra}
+                onChange={handleChange}
+                className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all text-gray-900 font-medium"
+              >
+                <option value="">Não especificado</option>
+                {SAFRAS_CAFE.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Qualidade (opcional)
+              </label>
+              <select
+                name="qualidade"
+                value={formData.qualidade}
+                onChange={handleChange}
+                className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all text-gray-900 font-medium"
+              >
+                <option value="">Não especificado</option>
+                {QUALIDADES_CAFE.map((q) => (
+                  <option key={q} value={q}>
+                    {q}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 

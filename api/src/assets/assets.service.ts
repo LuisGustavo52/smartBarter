@@ -37,6 +37,9 @@ export class AssetsService {
         descricao: dto.descricao,
         preco_sacas: dto.precoSacas,
         unidade_medida: dto.unidadeMedida ?? 'unidade',
+        tipo_cafe: dto.tipoCafe || null,
+        safra: dto.safra || null,
+        qualidade: dto.qualidade || null,
         fornecedor_wallet: dto.fornecedorWallet,
       })
       .select()
@@ -97,6 +100,9 @@ export class AssetsService {
       ...(dto.descricao !== undefined && { descricao: dto.descricao }),
       ...(dto.precoSacas !== undefined && { preco_sacas: dto.precoSacas }),
       ...(dto.unidadeMedida !== undefined && { unidade_medida: dto.unidadeMedida }),
+      ...(dto.tipoCafe !== undefined && { tipo_cafe: dto.tipoCafe || null }),
+      ...(dto.safra !== undefined && { safra: dto.safra || null }),
+      ...(dto.qualidade !== undefined && { qualidade: dto.qualidade || null }),
       updated_at: new Date().toISOString(),
     };
     const { data, error } = await this.supabaseService
