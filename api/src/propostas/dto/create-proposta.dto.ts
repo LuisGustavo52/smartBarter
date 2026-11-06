@@ -1,4 +1,4 @@
-import { IsNumber, IsString, Matches, Min } from 'class-validator';
+import { IsNumber, IsOptional, IsString, Matches, Min } from 'class-validator';
 
 export class CreatePropostaDto {
   @IsString()
@@ -16,9 +16,15 @@ export class CreatePropostaDto {
   @Min(0.000001)
   quantidadeComprada: number;
 
+  @IsOptional()
   @IsString()
-  safra: string;
+  safra?: string;
 
+  @IsOptional()
   @IsString()
-  tipoCafe: string;
+  tipoCafe?: string;
+
+  @IsOptional()
+  @IsString()
+  qualidade?: string;
 }

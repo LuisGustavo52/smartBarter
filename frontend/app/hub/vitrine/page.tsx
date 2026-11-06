@@ -187,6 +187,9 @@ export default function VitrinePage() {
                           precoSacas={Number(insumo.preco_sacas)}
                           unidadeMedida={insumo.unidade_medida}
                           nomeInsumo={insumo.nome}
+                          safra={insumo.safra}
+                          tipoCafe={insumo.tipo_cafe}
+                          qualidade={insumo.qualidade}
                         />
                       ) : (
                         <span className="text-sm font-medium text-gray-500">Apenas produtores podem fazer propostas.</span>

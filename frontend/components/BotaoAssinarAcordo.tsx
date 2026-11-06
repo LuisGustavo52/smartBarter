@@ -11,6 +11,9 @@ interface Props {
   precoSacas: number;
   unidadeMedida?: string;
   nomeInsumo?: string;
+  safra?: string | null;
+  tipoCafe?: string | null;
+  qualidade?: string | null;
 }
 
 export default function BotaoAssinarAcordo({
@@ -19,13 +22,14 @@ export default function BotaoAssinarAcordo({
   precoSacas,
   unidadeMedida = "unidade",
   nomeInsumo,
+  safra,
+  tipoCafe,
+  qualidade,
 }: Props) {
   const account = useActiveAccount();
   const [modalAberto, setModalAberto] = useState(false);
   const [montado, setMontado] = useState(false);
   const [quantidade, setQuantidade] = useState("1");
-  const [safra, setSafra] = useState("");
-  const [tipoCafe, setTipoCafe] = useState("");
   const [pending, setPending] = useState(false);
   const [success, setSuccess] = useState(false);
 
@@ -114,8 +118,8 @@ export default function BotaoAssinarAcordo({
       return;
     }
     const quantidadeComprada = Number(quantidade);
-    if (!Number.isFinite(quantidadeComprada) || quantidadeComprada <= 0 || !safra || !tipoCafe) {
-      notify.error("Informe quantidade, safra e tipo de café.");
+    if (!Number.isFinite(quantidadeComprada) || quantidadeComprada <= 0) {
+      notify.error("Informe uma quantidade válida.");
       return;
     }
 
@@ -131,8 +135,6 @@ export default function BotaoAssinarAcordo({
           fornecedorWallet,
           assetId,
           quantidadeComprada,
-          safra,
-          tipoCafe,
         }),
       });
       const body = await response.json().catch(() => null);
@@ -215,32 +217,42 @@ export default function BotaoAssinarAcordo({
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Safra
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={safra}
-                    onChange={(e) => setSafra(e.target.value)}
-                    placeholder="2026/2027"
-                    className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all text-gray-900"
-                  />
-                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                      Tipo de café (definido pelo insumo)
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={tipoCafe?.trim() ? tipoCafe : "Não informado pelo fornecedor"}
+                      className="w-full px-5 py-3.5 bg-gray-100 border border-gray-200 rounded-2xl text-gray-700 font-medium cursor-not-allowed outline-none"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Tipo de café
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={tipoCafe}
-                    onChange={(e) => setTipoCafe(e.target.value)}
-                    placeholder="Ex: Arábica Tipo 6 Bebida Dura"
-                    className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all text-gray-900"
-                  />
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                      Safra (definida pelo insumo)
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={safra?.trim() ? safra : "Não informado pelo fornecedor"}
+                      className="w-full px-5 py-3.5 bg-gray-100 border border-gray-200 rounded-2xl text-gray-700 font-medium cursor-not-allowed outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                      Qualidade (definida pelo insumo)
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={qualidade?.trim() ? qualidade : "Não informado pelo fornecedor"}
+                      className="w-full px-5 py-3.5 bg-gray-100 border border-gray-200 rounded-2xl text-gray-700 font-medium cursor-not-allowed outline-none"
+                    />
+                  </div>
                 </div>
 
                 {/* Bloco de conversão */}

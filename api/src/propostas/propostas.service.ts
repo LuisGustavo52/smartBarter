@@ -38,7 +38,7 @@ export class PropostasService {
     const { data: asset, error: assetError } = await this.supabaseService
       .getClient()
       .from('assets')
-      .select('id, tipo_ativo, fornecedor_wallet, preco_sacas, nome, unidade_medida')
+      .select('id, tipo_ativo, fornecedor_wallet, preco_sacas, nome, unidade_medida, safra, tipo_cafe, qualidade')
       .eq('id', dto.assetId)
       .eq('tipo_ativo', 'INSUMO')
       .maybeSingle();
@@ -55,6 +55,19 @@ export class PropostasService {
       throw new BadRequestException(err?.message ?? 'Erro ao calcular sacas da proposta.');
     }
 
+    const safraCopiada =
+      typeof asset.safra === 'string' && asset.safra.trim() !== ''
+        ? asset.safra.trim()
+        : 'Não especificado';
+    const tipoCafeCopiado =
+      typeof asset.tipo_cafe === 'string' && asset.tipo_cafe.trim() !== ''
+        ? asset.tipo_cafe.trim()
+        : 'Não especificado';
+    const qualidadeCopiada =
+      typeof asset.qualidade === 'string' && asset.qualidade.trim() !== ''
+        ? asset.qualidade.trim()
+        : null;
+
     const { data, error } = await this.supabaseService
       .getClient()
       .from('propostas')
@@ -66,8 +79,9 @@ export class PropostasService {
         preco_unitario_sacas: asset.preco_sacas,
         total_sacas: calculo.totalSacas,
         sacas_cpr: calculo.sacasCpr,
-        safra: dto.safra,
-        tipo_cafe: dto.tipoCafe,
+        safra: safraCopiada,
+        tipo_cafe: tipoCafeCopiado,
+        qualidade: qualidadeCopiada,
         status: StatusProposta.PENDENTE,
       })
       .select()
@@ -90,8 +104,9 @@ export class PropostasService {
         precoUnitarioSacas: asset.preco_sacas,
         totalSacas: calculo.totalSacas,
         sacasCpr: calculo.sacasCpr,
-        safra: dto.safra,
-        tipoCafe: dto.tipoCafe,
+        safra: safraCopiada,
+        tipoCafe: tipoCafeCopiado,
+        qualidade: qualidadeCopiada,
       },
     });
 
@@ -102,7 +117,7 @@ export class PropostasService {
     let query = this.supabaseService
       .getClient()
       .from('propostas')
-      .select('*, assets(id, nome, descricao, preco_sacas, unidade_medida, fornecedor_wallet)')
+      .select('*, assets(id, nome, descricao, preco_sacas, unidade_medida, safra, tipo_cafe, qualidade, fornecedor_wallet)')
       .order('created_at', { ascending: false });
     if (fornecedorWallet) query = query.ilike('fornecedor_wallet', fornecedorWallet);
     if (produtorWallet) query = query.ilike('produtor_wallet', produtorWallet);
@@ -116,7 +131,7 @@ export class PropostasService {
     const { data, error } = await this.supabaseService
       .getClient()
       .from('propostas')
-      .select('*, assets(id, nome, descricao, preco_sacas, unidade_medida, fornecedor_wallet)')
+      .select('*, assets(id, nome, descricao, preco_sacas, unidade_medida, safra, tipo_cafe, qualidade, fornecedor_wallet)')
       .eq('id', id)
       .maybeSingle();
     if (error) throw new InternalServerErrorException('Erro ao buscar proposta.');
