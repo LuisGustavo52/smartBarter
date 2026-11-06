@@ -10,6 +10,7 @@ import { smartBarterLocalChain } from "@/lib/smartBarterChain";
 import { carregarCprs, Cpr } from "@/lib/cprs";
 import { CONTRACT_ADDRESS } from "@/lib/config";
 import BotaoLiquidarCPR from "@/components/BotaoLiquidarCPR";
+import ModalDetalhesNFT, { DadosNFTModal } from "@/components/ModalDetalhesNFT";
 import UsuarioDisplay from "@/components/UsuarioDisplay";
 import { notify } from "@/lib/notify";
 import {
@@ -43,6 +44,15 @@ interface Insumo {
   created_at: string;
 }
 
+interface PropostaResumo {
+  id: string;
+  token_id?: number | string | null;
+  qualidade?: string | null;
+  assets?: {
+    qualidade?: string | null;
+  } | null;
+}
+
 export default function MeusAtivosPage() {
   const account = useActiveAccount();
   const [montado, setMontado] = useState(false);
@@ -73,6 +83,8 @@ export default function MeusAtivosPage() {
   const [cprs, setCprs] = useState<Cpr[]>([]);
   const [carregandoCprs, setCarregandoCprs] = useState(false);
   const [erroCprs, setErroCprs] = useState("");
+  const [propostasCarteira, setPropostasCarteira] = useState<PropostaResumo[]>([]);
+  const [nftSelecionado, setNftSelecionado] = useState<DadosNFTModal | null>(null);
 
   // Dados de Mercado
   const [marketData, setMarketData] = useState<any>(null);
@@ -150,17 +162,36 @@ export default function MeusAtivosPage() {
     }
   }, [tipoUsuario, fetchInsumos]);
 
-  // Busca CPRs on-chain
+  // Busca CPRs on-chain e propostas para enriquecer qualidade
   const fetchCprs = useCallback(async () => {
     if (!account?.address) {
       setCprs([]);
+      setPropostasCarteira([]);
       setCarregandoCprs(false);
       return;
     }
     setCarregandoCprs(true);
     setErroCprs("");
     try {
-      const lista = await carregarCprs(myContract, account.address);
+      const [lista, resFornecedor, resProdutor] = await Promise.all([
+        carregarCprs(myContract, account.address),
+        fetch(
+          `http://localhost:3001/propostas?${new URLSearchParams({
+            fornecedorWallet: account.address,
+          })}`
+        ).catch(() => null),
+        fetch(
+          `http://localhost:3001/propostas?${new URLSearchParams({
+            produtorWallet: account.address,
+          })}`
+        ).catch(() => null),
+      ]);
+      const listaFornecedor = resFornecedor?.ok ? await resFornecedor.json() : [];
+      const listaProdutor = resProdutor?.ok ? await resProdutor.json() : [];
+      setPropostasCarteira([
+        ...(Array.isArray(listaFornecedor) ? listaFornecedor : []),
+        ...(Array.isArray(listaProdutor) ? listaProdutor : []),
+      ]);
       setCprs(lista);
     } catch (err: any) {
       console.warn("Erro ao buscar CPRs on-chain:", err);
@@ -587,6 +618,13 @@ export default function MeusAtivosPage() {
                     cpr.fornecedor.toLowerCase() === account.address.toLowerCase();
                   const souDonoDoToken =
                     cpr.donoAtual?.toLowerCase() === account.address.toLowerCase();
+                  const propostaVinculada = propostasCarteira.find(
+                    (p) =>
+                      (cpr.idPropostaOffchain && p.id === cpr.idPropostaOffchain) ||
+                      (p.token_id != null && String(p.token_id) === cpr.tokenId.toString())
+                  );
+                  const qualidadeProposta =
+                    propostaVinculada?.qualidade ?? propostaVinculada?.assets?.qualidade ?? null;
 
                   return (
                     <div
@@ -715,7 +753,29 @@ export default function MeusAtivosPage() {
                       </div>
 
                       {/* Ações da CPR */}
-                      <div className="w-full md:w-auto flex flex-col items-end justify-center mt-4 md:mt-0 md:pl-6 border-t md:border-t-0 md:border-l border-gray-100 pt-6 md:pt-0 shrink-0">
+                      <div className="w-full md:w-auto flex flex-col items-end justify-center gap-3 mt-4 md:mt-0 md:pl-6 border-t md:border-t-0 md:border-l border-gray-100 pt-6 md:pt-0 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setNftSelecionado({
+                              tokenId: cpr.tokenId,
+                              produtor: cpr.produtor,
+                              fornecedor: cpr.fornecedor,
+                              sacas: cpr.sacas,
+                              insumo: cpr.insumo,
+                              quantidadeInsumo: cpr.quantidadeInsumo,
+                              safra: cpr.safra,
+                              tipoCafe: cpr.tipoCafe,
+                              qualidade: qualidadeProposta,
+                              liquidada: cpr.liquidada,
+                            })
+                          }
+                          className="px-5 py-2.5 bg-emerald-900 hover:bg-emerald-950 text-white text-sm font-bold rounded-xl transition-all shadow-sm flex items-center gap-2"
+                        >
+                          <span>☕</span>
+                          <span>Ver NFT</span>
+                        </button>
+
                         {souFornecedor && souDonoDoToken && cpr.entregue && !cpr.liquidada && (
                           <BotaoLiquidarCPR
                             contract={myContract}
@@ -741,6 +801,12 @@ export default function MeusAtivosPage() {
           </div>
         </div>
       )}
+
+      <ModalDetalhesNFT
+        isOpen={nftSelecionado !== null}
+        onClose={() => setNftSelecionado(null)}
+        dados={nftSelecionado}
+      />
 
       {/* Modal de Edição de Insumo */}
       {montado &&
