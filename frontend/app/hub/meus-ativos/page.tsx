@@ -322,7 +322,9 @@ export default function MeusAtivosPage() {
         </div>
 
         <div className="relative z-10">
-          <h1 className="text-3xl font-serif font-bold mb-2">Meus Ativos & CPRs</h1>
+          <h1 className="text-3xl font-serif font-bold mb-2">
+            {tipoUsuario === "PRODUTOR" ? "Colheitas" : "Meus Ativos & CPRs"}
+          </h1>
           <p className="text-emerald-100/80 text-sm max-w-md">
             Gerencie seus ativos registrados na plataforma e acompanhe as Cédulas de Produto Rural
             (CPRs) em operações de Barter.
