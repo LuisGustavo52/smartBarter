@@ -147,6 +147,26 @@ export default function VitrinePage() {
                       
                       <h3 className="text-xl font-bold text-gray-900 mt-3">{insumo.nome}</h3>
                       <p className="text-gray-600 mt-1">{insumo.descricao}</p>
+
+                      {(insumo.tipo_cafe || insumo.safra || insumo.qualidade) && (
+                        <div className="flex flex-wrap items-center gap-2 mt-3">
+                          {insumo.tipo_cafe && (
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                              ☕ {insumo.tipo_cafe}
+                            </span>
+                          )}
+                          {insumo.safra && (
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                              Safra {insumo.safra}
+                            </span>
+                          )}
+                          {insumo.qualidade && (
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-800 border border-purple-200">
+                              {insumo.qualidade}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
