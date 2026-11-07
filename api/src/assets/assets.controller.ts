@@ -1,23 +1,39 @@
-import { Controller, Post, Body, Get, Param, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { AssetsService } from './assets.service';
 import { CreateAssetDto } from './dto/create-asset.dto';
+import { UpdateAssetDto } from './dto/update-asset.dto';
 
 @Controller('assets')
 export class AssetsController {
   constructor(private readonly assetsService: AssetsService) {}
 
   @Post()
-  async create(@Body() createAssetDto: CreateAssetDto) {
-    return await this.assetsService.createAsset(createAssetDto);
+  create(@Body() dto: CreateAssetDto) {
+    return this.assetsService.createAsset(dto);
   }
 
   @Get()
-  async getAssets(@Query('tipo_ativo') tipoAtivo?: string) {
-    return await this.assetsService.getAssets(tipoAtivo);
+  findAll(@Query('tipo_ativo') tipoAtivo?: string) {
+    return this.assetsService.getAssets(tipoAtivo);
   }
 
   @Get('wallet/:address')
-  async getByWallet(@Param('address') address: string) {
-    return await this.assetsService.getAssetsByWallet(address);
+  findByWallet(@Param('address') address: string) {
+    return this.assetsService.getAssetsByWallet(address);
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.assetsService.getAsset(id);
+  }
+
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: UpdateAssetDto) {
+    return this.assetsService.updateAsset(id, dto);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string, @Query('fornecedorWallet') fornecedorWallet: string) {
+    return this.assetsService.removeAsset(id, fornecedorWallet);
   }
 }

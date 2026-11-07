@@ -6,6 +6,9 @@ import { UsersModule } from './users/users.module';
 import { SupabaseModule } from './supabase/supabase.module';
 import { AssetsModule } from './assets/assets.module';
 import { MarketModule } from './market/market.module';
+import { ReputacaoModule } from './reputacao/reputacao.module';
+import { PropostasModule } from './propostas/propostas.module';
+import { HistoricoModule } from './historico/historico.module';
 
 @Module({
   imports: [
@@ -14,6 +17,9 @@ import { MarketModule } from './market/market.module';
     UsersModule,
     AssetsModule,
     MarketModule,
+    ReputacaoModule,
+    PropostasModule,
+    HistoricoModule,
   ],
   controllers: [AppController],
   providers: [AppService],

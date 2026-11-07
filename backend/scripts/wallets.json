@@ -1,0 +1,22 @@
+[
+  {
+    "label": "Produtor (Fazenda Ouvidor)",
+    "address": "0xe65A778F7eB4943662f51ee3A8bDDe06678805D0",
+    "eth": "50"
+  },
+  {
+    "label": "Fornecedor 1 (Rep. Bayer)",
+    "address": "0x6c3E116F3C4F6F308ba124c51C91c29D7a784103",
+    "eth": "50"
+  },
+  {
+    "label": "Fornecedor 2 (Account 2)",
+    "address": "0xa7dA2AC872Ea65f2db408a0a9Cadf04206E39001",
+    "eth": "50"
+  },
+  {
+    "label": "Produtor 2 (Account 1)",
+    "address": "0x009805DBE4F5BeeC5a154C0Ce2B7df1695aa5b2a",
+    "eth": "50"
+  }
+]

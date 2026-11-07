@@ -25,13 +25,13 @@ async function main() {
     const block = await publicClient.getBlock({ blockNumber: i, includeTransactions: true });
     for (const tx of block.transactions) {
       if (typeof tx === 'object' && tx.hash) {
-          const hashStr = tx.hash.toLowerCase();
+          const hashStr = String(tx.hash).toLowerCase();
           if (hashStr.startsWith("0x772e9e") && hashStr.endsWith("b71f2")) {
               foundTx = tx;
               foundReceipt = await publicClient.getTransactionReceipt({ hash: tx.hash });
           }
       } else if (typeof tx === 'string') {
-          const hashStr = tx.toLowerCase();
+          const hashStr = String(tx).toLowerCase();
           if (hashStr.startsWith("0x772e9e") && hashStr.endsWith("b71f2")) {
               foundTx = tx;
               foundReceipt = await publicClient.getTransactionReceipt({ hash: tx as `0x${string}` });

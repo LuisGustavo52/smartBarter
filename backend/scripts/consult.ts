@@ -17,7 +17,7 @@ async function main() {
 
     // Contract
     const contractAddress = "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853";
-    console.log(`\n=== PROPOSTAS NO CONTRATO ${contractAddress} ===`);
+    console.log(`\n=== CPRs NO CONTRATO ${contractAddress} ===`);
     
     // Checar se ha codigo no endereco
     const code = await publicClient.getBytecode({ address: contractAddress });
@@ -30,16 +30,16 @@ async function main() {
     let id = 1n;
     while (true) {
       try {
-        const p = await cpr.read.propostas([id]) as any;
-        console.log(`ID ${id}: Produtor: ${p[0]}, Fornecedor: ${p[1]}, Sacas: ${p[2]}, Insumo: ${p[3]}, Ativa: ${p[4]}, Pendente: ${p[5]}, Confirmado: ${p[6]}`);
+        const p = await cpr.read.cprs([id]);
+        console.log(`ID ${id}: Produtor: ${p[0]}, Fornecedor: ${p[1]}, Sacas: ${p[2]}, Insumo: ${p[3]}, Quantidade: ${p[4]}, Safra: ${p[5]}, Entregue: ${p[9]}, Liquidada: ${p[10]}`);
         id++;
         if (id > 50n) {
-           console.log("Muitas propostas, parando no ID 50.");
+           console.log("Muitas CPRs, parando no ID 50.");
            break;
         }
       } catch (e: any) {
         if (e.message.includes("revert") || e.message.includes("out of bounds")) {
-           console.log(`-> Fim das propostas (ID ${id} reverteu/inexistente).`);
+           console.log(`-> Fim das CPRs (ID ${id} reverteu/inexistente).`);
         } else {
            console.log(`-> Erro na leitura do ID ${id}: ${e.message}`);
         }

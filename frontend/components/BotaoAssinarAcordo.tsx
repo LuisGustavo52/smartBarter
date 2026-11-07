@@ -1,207 +1,336 @@
 "use client";
 
-import { useState } from "react";
-import { prepareContractCall, getContract, sendTransaction } from "thirdweb";
-import { useActiveAccount, useActiveWalletChain } from "thirdweb/react";
-import { smartBarterLocalChain } from "@/lib/smartBarterChain";
-import { createThirdwebClient } from "thirdweb";
-import { useResolveCarteira } from "@/hooks/useResolveCarteira";
+import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
+import { useActiveAccount } from "thirdweb/react";
+import { notify } from "@/lib/notify";
 
-// 1. Inicializa o cliente Thirdweb
-const client = createThirdwebClient({
-  clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "d3690d56bdafa6a3cd84d948259dbbe0",
-});
-
-// 2. Aponta para o contrato implantado (Deployed)
-const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
-
-const myContract = getContract({
-  client,
-  chain: smartBarterLocalChain, // Usando a chain customizada com Chain ID 31337
-  address: CONTRACT_ADDRESS,
-});
-
-interface BotaoAssinarAcordoProps {
-  descricaoInsumo: string;
-  quantidadeSacasOriginal: bigint;
+interface Props {
+  assetId: string;
+  fornecedorWallet: string;
+  precoSacas: number;
+  unidadeMedida?: string;
+  nomeInsumo?: string;
+  safra?: string | null;
+  tipoCafe?: string | null;
+  qualidade?: string | null;
 }
 
 export default function BotaoAssinarAcordo({
-  descricaoInsumo,
-  quantidadeSacasOriginal,
-}: BotaoAssinarAcordoProps) {
+  assetId,
+  fornecedorWallet,
+  precoSacas,
+  unidadeMedida = "unidade",
+  nomeInsumo,
+  safra,
+  tipoCafe,
+  qualidade,
+}: Props) {
   const account = useActiveAccount();
-  const activeChain = useActiveWalletChain();
-  
-  // Estado local
-  const [isPending, setIsPending] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [isError, setIsError] = useState(false);
-  const [isCancelled, setIsCancelled] = useState(false);
-  const [fornecedor, setFornecedor] = useState("");
-  const [sacas, setSacas] = useState(quantidadeSacasOriginal.toString());
-  const resolucaoCarteira = useResolveCarteira(fornecedor);
+  const [modalAberto, setModalAberto] = useState(false);
+  const [montado, setMontado] = useState(false);
+  const [quantidade, setQuantidade] = useState("1");
+  const [pending, setPending] = useState(false);
+  const [success, setSuccess] = useState(false);
 
-  const handleAssinar = async () => {
-    setIsCancelled(false);
-    setIsError(false);
-    
-    if (!account) {
-      alert("Conecte sua carteira primeiro.");
-      return;
+  // Cotação de café (KC=F)
+  const [cotacaoCafe, setCotacaoCafe] = useState<number | null>(null);
+  const [carregandoCotacao, setCarregandoCotacao] = useState(false);
+  const [erroCotacao, setErroCotacao] = useState(false);
+
+  const quantidadeInputRef = useRef<HTMLInputElement>(null);
+
+  // Guarda "montado" para client component (createPortal)
+  useEffect(() => {
+    setMontado(true);
+  }, []);
+
+  // Foco no primeiro campo ao abrir o modal
+  useEffect(() => {
+    if (modalAberto) {
+      const timer = setTimeout(() => {
+        quantidadeInputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
     }
+  }, [modalAberto]);
 
-    if (resolucaoCarteira.isResolving || resolucaoCarteira.status === "checking") {
-      alert("Aguarde a resolução da carteira do fornecedor.");
-      return;
-    }
-
-    const enderecoResolvido = resolucaoCarteira.carteira;
-
-    if (!resolucaoCarteira.isReady || !enderecoResolvido) {
-      alert("Por favor, insira um @username válido e cadastrado ou um endereço 0x...");
-      return;
-    }
-
-    const qtdSacas = BigInt(sacas);
-    if (qtdSacas <= BigInt(0)) {
-      alert("A quantidade de sacas deve ser maior que zero.");
-      return;
-    }
-
-    // 1. Pop-up de Confirmação (UX Graceful)
-    const confirmar = window.confirm("Você tem certeza que deseja propor esta CPR na blockchain?");
-    if (!confirmar) {
-      console.warn("Transação abortada pelo usuário no pop-up.");
-      setIsCancelled(true);
-      return;
-    }
-
-    try {
-      setIsPending(true);
-      // 2. Preparação da Chamada - usa SEMPRE o endereço resolvido pelo hook
-      const transaction = prepareContractCall({
-        contract: myContract,
-        method: "function proporCPR(address _fornecedor, uint256 _sacas, string memory _insumo)",
-        params: [enderecoResolvido, qtdSacas, descricaoInsumo],
+  // Consulta da cotação do café ao abrir o modal
+  useEffect(() => {
+    if (!modalAberto) return;
+    setCarregandoCotacao(true);
+    setErroCotacao(false);
+    fetch("http://localhost:3001/market/cafe")
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Falha ao buscar cotação do café");
+        const data = await res.json();
+        const preco = Number(data?.precoAtualUsdSaca);
+        if (Number.isFinite(preco) && preco > 0) {
+          setCotacaoCafe(preco);
+        } else {
+          throw new Error("Preço retornado inválido");
+        }
+      })
+      .catch((err) => {
+        console.warn("Erro ao buscar cotação do café:", err);
+        setErroCotacao(true);
+        setCotacaoCafe(null);
+      })
+      .finally(() => {
+        setCarregandoCotacao(false);
       });
+  }, [modalAberto]);
 
-      // 3. Execução Envolvida em Try/Catch
-      const res = await sendTransaction({ transaction, account });
-      if (res?.transactionHash) {
-        console.log("Transação enviada com sucesso, hash:", res.transactionHash);
+  // Fechar com tecla Esc (não fecha se o envio estiver pendente)
+  useEffect(() => {
+    if (!modalAberto) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !pending) {
+        setModalAberto(false);
       }
-      
-      setIsPending(false);
-      setIsSuccess(true);
-    } catch (err: any) {
-      if (err?.transactionHash || err?.hash) {
-        console.warn("Transação transmitida com hash, ignorando erro secundário de recibo:", err);
-        setIsPending(false);
-        setIsSuccess(true);
-        return;
-      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [modalAberto, pending]);
 
-      if (
-        err?.message?.toLowerCase().includes("user rejected") ||
-        err?.code === 4001 ||
-        err?.name === "UserRejectedRequestError"
-      ) {
-        console.warn("Transação cancelada pelo usuário na MetaMask.");
-        setIsPending(false);
-        setIsCancelled(true);
-        return;
-      }
+  const fecharModal = () => {
+    if (pending) return;
+    setModalAberto(false);
+  };
 
-      console.error("Erro na transação blockchain:", err);
-      setIsPending(false);
-      setIsError(true);
+  // pré-visualização; o valor oficial é da API
+  function calcularPrevia(qtd: number, preco: number): { total: number; sacasCpr: number } | null {
+    if (!Number.isFinite(qtd) || qtd <= 0 || !Number.isFinite(preco) || preco <= 0) {
+      return null;
+    }
+    const total = Number((qtd * preco).toFixed(4));
+    const sacasCpr = Math.ceil(total);
+    if (total <= 0) return null;
+    return { total, sacasCpr };
+  }
+
+  const previa = calcularPrevia(Number(quantidade), precoSacas);
+
+  const enviarProposta = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!account) {
+      notify.error("Conecte sua carteira primeiro.");
+      return;
+    }
+    const quantidadeComprada = Number(quantidade);
+    if (!Number.isFinite(quantidadeComprada) || quantidadeComprada <= 0) {
+      notify.error("Informe uma quantidade válida.");
+      return;
+    }
+
+    let toastId: string | undefined;
+    try {
+      setPending(true);
+      toastId = notify.loading("Enviando proposta ao fornecedor...");
+      const response = await fetch("http://localhost:3001/propostas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          produtorWallet: account.address,
+          fornecedorWallet,
+          assetId,
+          quantidadeComprada,
+        }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.message ?? "Não foi possível enviar a proposta.");
+      setSuccess(true);
+      setModalAberto(false);
+      const mensagemSucesso =
+        body?.sacas_cpr != null
+          ? `Proposta enviada: ${body.sacas_cpr} sacas na CPR.`
+          : "Proposta enviada ao fornecedor.";
+      notify.success(mensagemSucesso, toastId);
+    } catch (error) {
+      notify.fromError(error, toastId);
+    } finally {
+      setPending(false);
     }
   };
 
-  // --- Renderização Condicional de Status (UI/UX) ---
-  if (isSuccess) {
+  if (success) {
     return (
-      <div className="bg-emerald-50 text-emerald-700 px-6 py-4 rounded-xl border border-emerald-200 flex items-center gap-3 font-semibold shadow-sm animate-in zoom-in duration-300">
-        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-        Proposta de CPR Enviada e Registrada na Blockchain!
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 font-semibold text-emerald-700 text-sm">
+        Proposta enviada e aguardando resposta.
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-start gap-4 w-full">
-      <div className="w-full flex flex-col gap-3 p-4 bg-gray-50 rounded-2xl border border-gray-100">
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Carteira do Fornecedor</label>
-          <input
-            type="text"
-            placeholder="0x... ou @username"
-            value={fornecedor}
-            onChange={(e) => setFornecedor(e.target.value)}
-            className="w-full bg-white border border-gray-200 rounded-lg px-4 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          />
-          <p className={`mt-2 text-xs font-medium ${
-            resolucaoCarteira.status === "resolved" || resolucaoCarteira.status === "direct"
-              ? "text-emerald-700"
-              : resolucaoCarteira.status === "invalid" || resolucaoCarteira.status === "not_found" || resolucaoCarteira.status === "error"
-                ? "text-red-600"
-                : "text-gray-500"
-          }`}>
-            {resolucaoCarteira.mensagem}
-          </p>
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Qtd de Sacas</label>
-          <input
-            type="number"
-            min="1"
-            value={sacas}
-            onChange={(e) => setSacas(e.target.value)}
-            className="w-full bg-white border border-gray-200 rounded-lg px-4 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          />
-        </div>
-      </div>
-
+    <>
       <button
-        onClick={handleAssinar}
-        disabled={
-          isPending ||
-          resolucaoCarteira.isResolving ||
-          resolucaoCarteira.status === "checking" ||
-          resolucaoCarteira.status === "not_found" ||
-          !resolucaoCarteira.isReady ||
-          !resolucaoCarteira.carteira
-        }
-        className="relative w-full overflow-hidden group bg-emerald-900 hover:bg-emerald-950 text-white font-bold py-4 px-8 rounded-2xl shadow-lg transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center min-w-[300px]"
+        type="button"
+        onClick={() => setModalAberto(true)}
+        className="rounded-xl bg-emerald-900 px-5 py-3 font-bold text-white hover:bg-emerald-950 transition-colors shadow-sm"
       >
-        {isPending ? (
-          <div className="flex items-center gap-3">
-            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-            <span>Aguardando MetaMask...</span>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3">
-            <span>Propor CPR (Assinar)</span>
-            <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" /></svg>
-          </div>
-        )}
+        Fazer proposta
       </button>
 
-      {/* Alerta Amigável de Cancelamento */}
-      {isCancelled && !isPending && (
-        <div className="flex items-center gap-2 text-amber-600 bg-amber-50 px-4 py-2 rounded-lg border border-amber-200 text-sm font-medium w-full animate-in slide-in-from-top-2">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-          Ação cancelada.
-        </div>
-      )}
+      {montado &&
+        modalAberto &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                fecharModal();
+              }
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="modal-checkout-titulo"
+              className="bg-white rounded-3xl shadow-2xl border border-gray-100 max-w-lg w-full p-6 md:p-8 relative max-h-[90vh] overflow-y-auto"
+            >
+              {/* Cabeçalho do modal */}
+              <div className="mb-6">
+                <h2 id="modal-checkout-titulo" className="text-2xl font-bold text-emerald-950">
+                  Checkout da proposta
+                </h2>
+                <p className="text-gray-500 text-sm mt-1">
+                  {nomeInsumo ? `${nomeInsumo} • Unidade: ${unidadeMedida}` : `Unidade: ${unidadeMedida}`}
+                </p>
+              </div>
 
-      {/* Erro crítico não-esperado */}
-      {isError && !isCancelled && (
-        <p className="text-red-600 text-sm mt-1 font-medium bg-red-50 p-3 rounded-lg border border-red-100 w-full">
-          Erro inesperado na blockchain. Tente novamente.
-        </p>
-      )}
-    </div>
+              {/* Formulário */}
+              <form onSubmit={enviarProposta} className="space-y-5">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Quantidade (em {unidadeMedida})
+                  </label>
+                  <input
+                    ref={quantidadeInputRef}
+                    type="number"
+                    min="0.000001"
+                    step="any"
+                    required
+                    value={quantidade}
+                    onChange={(e) => setQuantidade(e.target.value)}
+                    placeholder="Ex: 10"
+                    className="w-full px-5 py-4 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all text-gray-900"
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                      Tipo de café (definido pelo insumo)
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={tipoCafe?.trim() ? tipoCafe : "Não informado pelo fornecedor"}
+                      className="w-full px-5 py-3.5 bg-gray-100 border border-gray-200 rounded-2xl text-gray-700 font-medium cursor-not-allowed outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                      Safra (definida pelo insumo)
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={safra?.trim() ? safra : "Não informado pelo fornecedor"}
+                      className="w-full px-5 py-3.5 bg-gray-100 border border-gray-200 rounded-2xl text-gray-700 font-medium cursor-not-allowed outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                      Qualidade (definida pelo insumo)
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={qualidade?.trim() ? qualidade : "Não informado pelo fornecedor"}
+                      className="w-full px-5 py-3.5 bg-gray-100 border border-gray-200 rounded-2xl text-gray-700 font-medium cursor-not-allowed outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Bloco de conversão */}
+                {previa && (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-xs text-emerald-950 space-y-1">
+                    <p className="font-medium">
+                      {Number(quantidade).toLocaleString("pt-BR")} {unidadeMedida} ×{" "}
+                      {precoSacas.toLocaleString("pt-BR")} sacas ={" "}
+                      <span className="font-bold">{previa.total.toLocaleString("pt-BR")} sacas</span>
+                    </p>
+                    {previa.sacasCpr !== previa.total && (
+                      <p className="text-emerald-700">
+                        Será registrado na CPR:{" "}
+                        <span className="font-bold">{previa.sacasCpr.toLocaleString("pt-BR")} sacas</span> (arredondado para cima)
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Bloco de cotação */}
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4 text-xs space-y-1 text-blue-950">
+                  {carregandoCotacao ? (
+                    <p className="text-gray-500">Consultando cotação...</p>
+                  ) : erroCotacao || cotacaoCafe === null ? (
+                    <p className="text-gray-500">Cotação indisponível no momento.</p>
+                  ) : (
+                    <>
+                      <p className="font-medium text-blue-900">
+                        Cotação atual do café (KC=F): US${" "}
+                        {cotacaoCafe.toLocaleString("pt-BR", {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}{" "}
+                        por saca
+                      </p>
+                      {previa && (
+                        <p className="text-blue-950 font-semibold">
+                          Valor de referência da troca: US${" "}
+                          {(previa.sacasCpr * cotacaoCafe).toLocaleString("pt-BR", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Botões do modal */}
+                <div className="pt-4 flex items-center justify-end gap-3 border-t border-gray-100">
+                  <button
+                    type="button"
+                    onClick={fecharModal}
+                    disabled={pending}
+                    className="px-6 py-4 rounded-2xl border border-gray-200 bg-white font-semibold text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={pending || !account || !previa}
+                    className="flex-1 px-8 py-4 bg-emerald-900 hover:bg-emerald-950 font-bold text-white rounded-2xl shadow-xl shadow-emerald-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {pending ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Enviando...</span>
+                      </>
+                    ) : (
+                      "Confirmar proposta"
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>,
+          document.body
+        )}
+    </>
   );
 }

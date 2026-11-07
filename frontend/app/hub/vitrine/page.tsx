@@ -4,12 +4,16 @@ import { useState, useEffect } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import BotaoAssinarAcordo from "@/components/BotaoAssinarAcordo";
 import UsuarioDisplay from "@/components/UsuarioDisplay";
+import ReputacaoEstrelas from "@/components/ReputacaoEstrelas";
+import { notify } from "@/lib/notify";
 
 export default function VitrinePage() {
   const account = useActiveAccount();
   const [insumos, setInsumos] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
+  const [isProdutor, setIsProdutor] = useState(false);
+  const [checkingProfile, setCheckingProfile] = useState(true);
 
   useEffect(() => {
     async function fetchInsumos() {
@@ -22,14 +26,39 @@ export default function VitrinePage() {
         const data = await res.json();
         setInsumos(data);
       } catch (err: any) {
-        console.error(err);
-        setError(err.message);
+        console.warn("Erro ao buscar vitrine:", err);
+        notify.error("Não foi possível carregar a vitrine. Verifique a conexão.", "vitrine-error");
+        setError("Não foi possível carregar os insumos da vitrine.");
       } finally {
         setIsLoading(false);
       }
     }
     fetchInsumos();
   }, []);
+
+  useEffect(() => {
+    if (!account?.address) {
+      setIsProdutor(false);
+      setCheckingProfile(false);
+      return;
+    }
+    setCheckingProfile(true);
+    fetch(`http://localhost:3001/users/wallet/${account.address}`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Não foi possível consultar o perfil.");
+        return response.json();
+      })
+      .then((payload) => {
+        // A API retorna { exists, user }, não o usuário diretamente.
+        const user = payload?.user;
+        setIsProdutor(user?.tipo_usuario?.toUpperCase() === "PRODUTOR");
+      })
+      .catch((profileError) => {
+        console.warn("Erro ao consultar perfil da carteira:", profileError);
+        setIsProdutor(false);
+      })
+      .finally(() => setCheckingProfile(false));
+  }, [account?.address]);
 
   return (
     <div className="max-w-6xl mx-auto py-12 px-6 animate-in fade-in duration-700">
@@ -106,35 +135,65 @@ export default function VitrinePage() {
                     <div className="mb-4">
                       <div className="flex justify-between items-start mb-2">
                         <div className="inline-flex items-center gap-2 bg-blue-50 text-blue-800 text-xs font-bold uppercase px-3 py-1 rounded-full">
-                          <span>{insumo.dono_tipo_usuario} — {insumo.dono_nome_propriedade_ou_empresa}</span>
+                          <span>Fornecedor</span>
                         </div>
-                        <span className="text-xs font-mono text-gray-400 bg-gray-50 px-2 py-1 rounded-lg border border-gray-100">
-                          <UsuarioDisplay address={insumo.dono_wallet} showIcon={false} />
-                        </span>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-xs font-mono text-gray-400 bg-gray-50 px-2 py-1 rounded-lg border border-gray-100">
+                            <UsuarioDisplay address={insumo.fornecedor_wallet} showIcon={false} />
+                          </span>
+                          <ReputacaoEstrelas carteira={insumo.fornecedor_wallet} />
+                        </div>
                       </div>
                       
-                      <h3 className="text-xl font-bold text-gray-900 mt-3">{insumo.descricao}</h3>
-                      <p className="text-emerald-700 font-semibold mt-1">
-                        {insumo.quantidade} {insumo.unidade_medida}
-                      </p>
+                      <h3 className="text-xl font-bold text-gray-900 mt-3">{insumo.nome}</h3>
+                      <p className="text-gray-600 mt-1">{insumo.descricao}</p>
+
+                      {(insumo.tipo_cafe || insumo.safra || insumo.qualidade) && (
+                        <div className="flex flex-wrap items-center gap-2 mt-3">
+                          {insumo.tipo_cafe && (
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                              ☕ {insumo.tipo_cafe}
+                            </span>
+                          )}
+                          {insumo.safra && (
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                              Safra {insumo.safra}
+                            </span>
+                          )}
+                          {insumo.qualidade && (
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-800 border border-purple-200">
+                              {insumo.qualidade}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
                       <div>
-                        <div className="text-sm text-gray-500 font-medium mb-1">Preço Total Estimado</div>
+                        <div className="text-sm text-gray-500 font-medium mb-1">Preço em sacas de café</div>
                         <div className="text-2xl font-black text-gray-900">
-                          US$ {Number(insumo.valor_estimado_usd).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </div>
-                        <div className="text-xs text-gray-400 font-medium mt-1">
-                          ≈ R$ {Number(insumo.valor_estimado_brl).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          {Number(insumo.preco_sacas).toLocaleString('pt-BR')} sacas por {insumo.unidade_medida ?? "unidade"}
                         </div>
                       </div>
                       
                       {/* Botao de assinar acordo para propor CPR */}
-                      <BotaoAssinarAcordo 
-                        descricaoInsumo={insumo.descricao} 
-                        quantidadeSacasOriginal={BigInt(Math.max(1, Math.floor(insumo.valor_estimado_brl / 1500)))} 
-                      />
+                      {checkingProfile ? (
+                        <span className="text-sm font-medium text-gray-500">Verificando perfil...</span>
+                      ) : isProdutor ? (
+                        <BotaoAssinarAcordo
+                          assetId={insumo.id}
+                          fornecedorWallet={insumo.fornecedor_wallet}
+                          precoSacas={Number(insumo.preco_sacas)}
+                          unidadeMedida={insumo.unidade_medida}
+                          nomeInsumo={insumo.nome}
+                          safra={insumo.safra}
+                          tipoCafe={insumo.tipo_cafe}
+                          qualidade={insumo.qualidade}
+                        />
+                      ) : (
+                        <span className="text-sm font-medium text-gray-500">Apenas produtores podem fazer propostas.</span>
+                      )}
                     </div>
 
                   </div>

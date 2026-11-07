@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import { createThirdwebClient } from "thirdweb";
 import { createAuth, signLoginPayload } from "thirdweb/auth";
-import { toast, Toaster } from "react-hot-toast";
+import { notify } from "@/lib/notify";
 import { invalidateUserCache } from "@/components/UsuarioDisplay";
+import ReputacaoEstrelas from "@/components/ReputacaoEstrelas";
 
 const client = createThirdwebClient({
   clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "d3690d56bdafa6a3cd84d948259dbbe0",
@@ -45,7 +46,8 @@ export default function PerfilPage() {
           }
         }
       } catch (err) {
-        console.error("Erro ao carregar perfil:", err);
+        console.warn("Erro ao carregar perfil:", err);
+        notify.error("Não foi possível carregar o perfil. Verifique a conexão.", "perfil-error");
       } finally {
         setLoading(false);
       }
@@ -75,7 +77,7 @@ export default function PerfilPage() {
           setUsernameStatus(data.available ? "available" : "taken");
         }
       } catch (err) {
-        console.error("Erro ao validar username:", err);
+        console.warn("Erro ao validar username:", err);
         setUsernameStatus("idle");
       }
     }, 500);
@@ -87,12 +89,12 @@ export default function PerfilPage() {
     e.preventDefault();
     if (!account) return;
     if (usernameStatus === "taken" || usernameStatus === "invalid") {
-      toast.error("Por favor, escolha um @username válido e disponível.");
+      notify.error("Por favor, escolha um @username válido e disponível.");
       return;
     }
 
     setSaving(true);
-    const toastId = toast.loading("Solicitando assinatura segura na carteira...");
+    const toastId = notify.loading("Solicitando assinatura segura na carteira...");
 
     try {
       // 1. Gera Payload e Solicita Assinatura (SIWE)
@@ -100,7 +102,7 @@ export default function PerfilPage() {
       const signedResult = await signLoginPayload({ account, payload });
       const signature = typeof signedResult === "string" ? signedResult : (signedResult as any)?.signature ?? String(signedResult);
 
-      toast.loading("Salvando alterações...", { id: toastId });
+      notify.loading("Salvando alterações...", toastId);
 
       // 2. Atualiza via PATCH
       const res = await fetch(`http://localhost:3001/users/wallet/${account.address}`, {
@@ -115,11 +117,12 @@ export default function PerfilPage() {
       });
 
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.message || "Erro ao salvar perfil");
+        const errData = await res.json().catch(() => ({}));
+        const msg = Array.isArray(errData.message) ? errData.message.join(" ") : errData.message || "Erro ao salvar perfil";
+        throw Object.assign(new Error(msg), { userMessage: msg });
       }
 
-      toast.success("Perfil atualizado com sucesso!", { id: toastId });
+      notify.success("Perfil atualizado com sucesso!", toastId);
       
       // Atualiza o cache local
       setUserData({
@@ -133,8 +136,8 @@ export default function PerfilPage() {
       invalidateUserCache(account.address);
 
     } catch (err: any) {
-      console.error(err);
-      toast.error(err.message || "Falha ao atualizar perfil", { id: toastId });
+      console.warn("Falha ao atualizar perfil", err);
+      notify.fromError(err, toastId);
     } finally {
       setSaving(false);
     }
@@ -158,7 +161,6 @@ export default function PerfilPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20">
-      <Toaster position="top-right" toastOptions={{ style: { background: '#064e3b', color: '#fff' } }} />
       
       {/* Banner */}
       <div className="relative overflow-hidden bg-emerald-950 rounded-3xl p-8 border border-emerald-800/50 shadow-2xl">
@@ -254,9 +256,12 @@ export default function PerfilPage() {
 
               <div className="md:col-span-2">
                 <label className="block text-xs font-semibold text-gray-500 mb-1">Carteira Vinculada (0x)</label>
-                <div className="px-5 py-3 bg-gray-50 border border-gray-100 rounded-xl text-gray-500 font-mono text-sm flex items-center gap-3">
-                  <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" /></svg>
-                  {userData.carteira_digital}
+                <div className="px-5 py-3 bg-gray-50 border border-gray-100 rounded-xl text-gray-500 font-mono text-sm flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4" /></svg>
+                    {userData.carteira_digital}
+                  </div>
+                  <ReputacaoEstrelas carteira={userData.carteira_digital} />
                 </div>
               </div>
             </div>

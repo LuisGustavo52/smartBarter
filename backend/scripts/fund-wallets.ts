@@ -1,31 +1,50 @@
+import { readFileSync } from "node:fs";
 import { network } from "hardhat";
-import { parseEther } from "viem";
+import { isAddress, parseEther } from "viem";
+
+interface WalletEntry {
+  label: string;
+  address: string;
+  eth: string;
+}
 
 async function main() {
   const { viem } = await network.create();
   const testClients = await viem.getWalletClients();
   const funder = testClients[0]; // Tem 10.000 ETH no hardhat node
-  
-  const produtor = "0xe65A778F7eB4943662f51ee3A8bDDe06678805D0"; // Fazenda Ouvidor
-  const fornecedor1 = "0x6c3E116F3C4F6F308ba124c51C91c29D7a784103"; // Rep. Bayer
-  const fornecedor2 = "0xa7dA2AC872Ea65f2db408a0a9Cadf04206E39001"; // Account 2
-
   const publicClient = await viem.getPublicClient();
+
+  const raw = readFileSync(new URL("./wallets.json", import.meta.url), "utf-8");
+  const wallets: WalletEntry[] = JSON.parse(raw);
+
+  const validWallets: WalletEntry[] = [];
+  for (const w of wallets) {
+    if (!isAddress(w.address)) {
+      console.warn(`[AVISO] Endereço inválido para ${w.label} (${w.address}). Pulando...`);
+      continue;
+    }
+    validWallets.push(w);
+  }
 
   const printBalances = async () => {
     console.log(`\nSaldos atuais:`);
-    console.log(`- Funder (Hardhat #0): ${await publicClient.getBalance({address: funder.account.address})}`);
-    console.log(`- Produtor (Fazenda): ${await publicClient.getBalance({address: produtor as `0x${string}`})}`);
-    console.log(`- Fornecedor 1 (Bayer): ${await publicClient.getBalance({address: fornecedor1 as `0x${string}`})}`);
-    console.log(`- Fornecedor 2 (Account 2): ${await publicClient.getBalance({address: fornecedor2 as `0x${string}`})}\n`);
+    console.log(`- Funder (Hardhat #0): ${await publicClient.getBalance({ address: funder.account.address })}`);
+    for (const w of validWallets) {
+      console.log(`- ${w.label}: ${await publicClient.getBalance({ address: w.address as `0x${string}` })}`);
+    }
+    console.log("");
   };
 
   await printBalances();
-  console.log("Financiando as carteiras com 50 ETH falsos cada...");
+  console.log("Financiando as carteiras...");
 
-  await funder.sendTransaction({ to: produtor, value: parseEther("50") });
-  await funder.sendTransaction({ to: fornecedor1, value: parseEther("50") });
-  await funder.sendTransaction({ to: fornecedor2, value: parseEther("50") });
+  for (const w of validWallets) {
+    console.log(`Enviando ${w.eth} ETH para ${w.label} (${w.address})...`);
+    await funder.sendTransaction({
+      to: w.address as `0x${string}`,
+      value: parseEther(w.eth),
+    });
+  }
 
   console.log("Transferências concluídas!");
   await printBalances();

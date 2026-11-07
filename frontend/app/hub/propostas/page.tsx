@@ -1,321 +1,157 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useActiveAccount, useReadContract } from "thirdweb/react";
-import { getContract, prepareContractCall, sendTransaction, readContract } from "thirdweb";
+import { useCallback, useEffect, useState } from "react";
+import { useActiveAccount } from "thirdweb/react";
+import { createThirdwebClient, getContract, parseEventLogs, prepareContractCall, prepareEvent, readContract, sendTransaction } from "thirdweb";
 import { smartBarterLocalChain } from "@/lib/smartBarterChain";
-import { createThirdwebClient } from "thirdweb";
-import BotaoConfirmarInsumo from "@/components/BotaoConfirmarInsumo";
 import { fetchRawEvents } from "@/lib/blockchain-queries";
 import UsuarioDisplay from "@/components/UsuarioDisplay";
+import ReputacaoEstrelas from "@/components/ReputacaoEstrelas";
+import BotaoConfirmarInsumo from "@/components/BotaoConfirmarInsumo";
+import BotaoLiquidarCPR from "@/components/BotaoLiquidarCPR";
+import ModalDetalhesNFT, { DadosNFTModal } from "@/components/ModalDetalhesNFT";
+import { notify } from "@/lib/notify";
+import { CONTRACT_ADDRESS } from "@/lib/config";
 
-// Inicializa o cliente Thirdweb
-const client = createThirdwebClient({
-  clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "d3690d56bdafa6a3cd84d948259dbbe0",
-});
+const API_BASE_URL = "http://localhost:3001";
+const client = createThirdwebClient({ clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "d3690d56bdafa6a3cd84d948259dbbe0" });
+const contract = getContract({ client, chain: smartBarterLocalChain, address: CONTRACT_ADDRESS });
+const EVENT_SIGNATURE = "event CPREmitida(uint256 indexed tokenId, address indexed produtor, address indexed fornecedor, uint256 sacas, string insumo, string quantidadeInsumo, string safra, string tipoCafe, string idPropostaOffchain)";
+const emittedEvent = prepareEvent({ signature: EVENT_SIGNATURE });
 
-const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+type Proposta = {
+  id: string;
+  produtor_wallet: string;
+  fornecedor_wallet: string;
+  quantidade_comprada: number;
+  safra: string;
+  tipo_cafe: string;
+  qualidade?: string | null;
+  status: string;
+  token_id?: number;
+  preco_unitario_sacas?: number;
+  total_sacas?: number;
+  sacas_cpr?: number;
+  assets?: { nome: string; preco_sacas?: number; unidade_medida?: string; qualidade?: string | null };
+};
+type Cpr = { tokenId: bigint; produtor: string; fornecedor: string; sacas: bigint; insumo: string; quantidadeInsumo: string; safra: string; tipoCafe: string; idPropostaOffchain: string; entregue: boolean; liquidada: boolean; donoAtual: string | null };
 
-const myContract = getContract({
-  client,
-  chain: smartBarterLocalChain,
-  address: CONTRACT_ADDRESS,
-});
-
-function BotaoAceitar({ propostaId, onSuccess }: { propostaId: bigint; onSuccess: () => void }) {
-  const account = useActiveAccount();
-  const [isPending, setIsPending] = useState(false);
-  const [error, setError] = useState("");
-
-  const handleAceitar = async () => {
-    if (!account) {
-      setError("Carteira não conectada.");
-      return;
-    }
-
+async function carregarCprs(wallet: string): Promise<Cpr[]> {
+  const events = await fetchRawEvents(contract.address, EVENT_SIGNATURE);
+  const result: Cpr[] = [];
+  for (const event of events) {
+    const tokenId = event.args.tokenId as bigint;
+    const data = await readContract({
+      contract,
+      method: "function cprs(uint256) view returns (address produtor, address fornecedor, uint256 sacas, string insumo, string quantidadeInsumo, string safra, string tipoCafe, string idPropostaOffchain, bool aguardandoEntrega, bool entregue, bool liquidada)",
+      params: [tokenId],
+    }) as readonly [string, string, bigint, string, string, string, string, string, boolean, boolean, boolean];
+    const produtor = data[0];
+    const fornecedor = data[1];
+    if (produtor.toLowerCase() !== wallet.toLowerCase() && fornecedor.toLowerCase() !== wallet.toLowerCase()) continue;
+    let donoAtual: string | null = null;
     try {
-      setIsPending(true);
-      setError("");
-
-      const transaction = prepareContractCall({
-        contract: myContract,
-        method: "function aceitarProposta(uint256 _propostaId)",
-        params: [propostaId],
-      });
-
-      const res = await sendTransaction({ transaction, account });
-      if (res?.transactionHash) {
-        console.log("Proposta aceita com sucesso, hash:", res.transactionHash);
-      }
-      
-      setIsPending(false);
-      onSuccess();
-    } catch (err: any) {
-      if (err?.transactionHash || err?.hash) {
-        console.warn("Transação transmitida com hash, ignorando erro secundário de recibo:", err);
-        setIsPending(false);
-        onSuccess();
-        return;
-      }
-
-      if (
-        err?.message?.toLowerCase().includes("user rejected") ||
-        err?.code === 4001 ||
-        err?.name === "UserRejectedRequestError"
-      ) {
-        console.warn("Transação cancelada pelo usuário na MetaMask.");
-        setIsPending(false);
-        setError("Transação cancelada pelo usuário.");
-        return;
-      }
-
-      console.error(err);
-      setIsPending(false);
-      setError("Erro ao aceitar proposta. Tente novamente.");
+      donoAtual = await readContract({ contract, method: "function ownerOf(uint256) view returns (address)", params: [tokenId] }) as string;
+    } catch {
+      donoAtual = null;
     }
-  };
+    result.push({ tokenId, produtor, fornecedor, sacas: data[2], insumo: data[3], quantidadeInsumo: data[4], safra: data[5], tipoCafe: data[6], idPropostaOffchain: data[7], entregue: data[9], liquidada: data[10], donoAtual });
+  }
+  return result.reverse();
+}
 
-  return (
-    <div className="flex flex-col gap-2">
-      <button
-        onClick={handleAceitar}
-        disabled={isPending}
-        className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-wait"
-      >
-        {isPending ? (
-          <>
-            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-            Processando...
-          </>
-        ) : (
-          "Aceitar Proposta"
-        )}
-      </button>
-      {error && <span className="text-xs text-red-600 font-medium">{error}</span>}
-    </div>
-  );
+async function obterTokenId(hash: string): Promise<bigint> {
+  const response = await fetch("http://127.0.0.1:8545", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: Date.now(), method: "eth_getTransactionReceipt", params: [hash] }) });
+  const payload = await response.json();
+  if (!response.ok || payload.error || !payload.result || payload.result.status !== "0x1") throw new Error("Não foi possível confirmar a emissão da CPR.");
+  const events = parseEventLogs({ logs: payload.result.logs ?? [], events: [emittedEvent] });
+  const tokenId = events[0]?.args?.tokenId;
+  if (tokenId === undefined) throw new Error("Evento CPREmitida não encontrado.");
+  return tokenId;
+}
+
+function sacasParaCpr(proposta: Proposta): number {
+  if (proposta.sacas_cpr != null) {
+    const sacas = Number(proposta.sacas_cpr);
+    if (Number.isFinite(sacas) && sacas > 0) return sacas;
+  }
+  const preco = Number(proposta.assets?.preco_sacas);
+  const qtd = Number(proposta.quantidade_comprada);
+  if (Number.isFinite(preco) && preco > 0 && Number.isFinite(qtd) && qtd > 0) {
+    const total = Number((qtd * preco).toFixed(4));
+    const sacasCpr = Math.ceil(total);
+    if (total > 0 && sacasCpr >= 1) return sacasCpr;
+  }
+  throw new Error("Não foi possível calcular as sacas desta proposta.");
+}
+
+function AceitarProposta({ proposta, onSuccess }: { proposta: Proposta; onSuccess: () => void }) {
+  const account = useActiveAccount();
+  const [pending, setPending] = useState(false);
+  const aceitar = async () => {
+    if (!account) return notify.error("Carteira não conectada.");
+    let toastId: string | undefined;
+    try {
+      setPending(true); toastId = notify.loading("Emitindo CPR na blockchain...");
+      const sacasCalculadas = sacasParaCpr(proposta);
+      const tx = prepareContractCall({ contract, method: "function emitirCPR(address produtor, uint256 sacas, string insumo, string quantidadeInsumo, string safra, string tipoCafe, string idPropostaOffchain)", params: [proposta.produtor_wallet as `0x${string}`, BigInt(sacasCalculadas), proposta.assets?.nome ?? "Insumo", `${proposta.quantidade_comprada} ${proposta.assets?.unidade_medida ?? "unidades"}`, proposta.safra, proposta.tipo_cafe, proposta.id] });
+      const tokenId = await obterTokenId((await sendTransaction({ transaction: tx, account })).transactionHash);
+      const response = await fetch(`${API_BASE_URL}/propostas/${proposta.id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fornecedorWallet: account.address, status: "Aceita", tokenId: Number(tokenId) }) });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.message ?? "A CPR foi emitida, mas o aceite não foi salvo.");
+      notify.success(`Proposta aceita. CPR #${tokenId} emitida.`, toastId); onSuccess();
+    } catch (error) { notify.fromError(error, toastId); } finally { setPending(false); }
+  };
+  return <button onClick={aceitar} disabled={pending} className="rounded-xl bg-emerald-600 px-5 py-2 font-bold text-white disabled:opacity-70">{pending ? "Processando..." : "Emitir CPR e aceitar"}</button>;
 }
 
 export default function PropostasPage() {
   const account = useActiveAccount();
-  const [refreshCounter, setRefreshCounter] = useState(0);
+  const [role, setRole] = useState<string>();
+  const [pendentes, setPendentes] = useState<Proposta[]>([]);
+  const [enviadas, setEnviadas] = useState<Proposta[]>([]);
+  const [todasPropostas, setTodasPropostas] = useState<Proposta[]>([]);
+  const [cprs, setCprs] = useState<Cpr[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [nftSelecionado, setNftSelecionado] = useState<DadosNFTModal | null>(null);
 
-  // --- PRODUTOR STATE ---
-  const [propostasProdutor, setPropostasProdutor] = useState<any[]>([]);
-  const [isPendingProdutor, setIsPendingProdutor] = useState(false);
-
-  const addressToSearch = account?.address || "0x0000000000000000000000000000000000000000";
-
-  // --- LEITURA FORNECEDOR (MANTIDA) ---
-  const { data, isPending, refetch } = useReadContract({
-    contract: myContract,
-    method: "function getPropostasPendentesPorFornecedor(address _fornecedor) external view returns (uint256[] ids, (address produtor, address fornecedor, uint256 sacas, string insumo, bool ativa, bool pendente, bool insumoConfirmado)[] pendentes)",
-    params: [addressToSearch]
-  });
-
-  // --- LEITURA PRODUTOR ---
-  useEffect(() => {
-    async function fetchPropostasProdutor() {
-      if (!account?.address) return;
-      setIsPendingProdutor(true);
-      try {
-        const events = await fetchRawEvents(
-          myContract.address, 
-          "event PropostaCriada(uint256 indexed propostaId, address indexed produtor, address indexed fornecedor, uint256 sacas, string insumo)"
-        );
-
-        // 2. Filtrar os eventos onde o produtor e a conta atual
-        const meusEventos = events.filter(
-          (e: any) => e.args.produtor?.toLowerCase() === account.address.toLowerCase()
-        );
-
-        // 3. Ler o status atual de cada proposta encontrada
-        const propostasAtivas: any[] = [];
-        for (const e of meusEventos) {
-          const pId = e.args.propostaId;
-          if (pId !== undefined) {
-            const p = await readContract({
-              contract: myContract,
-              method: "function propostas(uint256) view returns (address produtor, address fornecedor, uint256 sacas, string insumo, bool ativa, bool pendente, bool insumoConfirmado)",
-              params: [pId],
-            });
-
-            // Queremos apenas as ATIVAS (aceitas pelo fornecedor) e NÃO CONFIRMADAS ainda
-            const condition = p[4] === true && p[6] === false;
-
-            if (condition) {
-              propostasAtivas.push({
-                id: pId,
-                produtor: p[0],
-                fornecedor: p[1],
-                sacas: p[2],
-                insumo: p[3]
-              });
-            }
-          }
-        }
-
-        setPropostasProdutor(propostasAtivas);
-      } catch (err) {
-        console.error("Erro ao buscar propostas do produtor:", err);
-      } finally {
-        setIsPendingProdutor(false);
+  const carregar = useCallback(async () => {
+    if (!account?.address) return;
+    setLoading(true);
+    try {
+      const userResponse = await fetch(`${API_BASE_URL}/users/wallet/${account.address}`);
+      const payload = userResponse.ok ? await userResponse.json() : null;
+      const user = payload?.user;
+      setRole(user?.tipo_usuario);
+      const params = new URLSearchParams(user?.tipo_usuario === "FORNECEDOR" ? { fornecedorWallet: account.address } : { produtorWallet: account.address });
+      const response = await fetch(`${API_BASE_URL}/propostas?${params}`);
+      const propostas: Proposta[] = response.ok ? await response.json() : [];
+      setTodasPropostas(propostas);
+      if (user?.tipo_usuario === "FORNECEDOR") {
+        setPendentes(propostas.filter((p) => p.status === "Pendente"));
+      } else {
+        setEnviadas(propostas);
       }
-    }
+      setCprs(await carregarCprs(account.address));
+    } catch (error) {
+      console.warn("Erro ao carregar propostas e CPRs:", error);
+      notify.error("Não foi possível carregar seus contratos.");
+    } finally { setLoading(false); }
+  }, [account?.address]);
 
-    fetchPropostasProdutor();
-  }, [account?.address, refreshCounter]);
+  useEffect(() => { carregar(); }, [carregar]);
 
-  const handleSuccess = () => {
-    setRefreshCounter(c => c + 1);
-    refetch(); // Força o hook do thirdweb a atualizar
-  };
-
+  if (!account) return <div className="mx-auto max-w-6xl p-12 text-center"><h1 className="text-2xl font-bold">Conecte sua carteira para acessar seus contratos.</h1></div>;
   return (
-    <div className="max-w-6xl mx-auto py-12 px-6 animate-in fade-in duration-700">
-      
-      {/* Banner Superior */}
-      <div className="bg-[#0A1A14] text-white rounded-3xl p-8 mb-10 shadow-xl relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-6">
-        <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-          <svg className="w-48 h-48" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-        </div>
-        
-        <div className="relative z-10">
-          <h1 className="text-3xl font-serif font-bold mb-2">Painel de Propostas</h1>
-            <p className="text-emerald-100/80 text-sm max-w-md">
-              Visualize suas propostas pendentes e confirme o recebimento de insumos para emitir a CPR.
-            </p>
-          </div>
-
-          <div className="relative z-10 w-full md:w-auto flex flex-col items-end gap-3">
-            {account ? (
-              <>
-                <span className="text-emerald-500 text-xs font-bold uppercase tracking-wider">Conta Conectada</span>
-                <div className="inline-flex items-center gap-3 bg-white/10 backdrop-blur-md border border-white/20 px-5 py-3 rounded-2xl">
-                  <div className="w-2.5 h-2.5 bg-emerald-400 rounded-full animate-pulse shadow-[0_0_10px_rgba(52,211,153,0.8)]"></div>
-                  <span className="font-mono text-sm text-white tracking-wider">
-                    <UsuarioDisplay address={account.address} showIcon={false} />
-                  </span>
-                </div>
-              </>
-            ) : (
-              <div className="inline-flex items-center gap-3 bg-red-900/40 border border-red-500/30 px-5 py-3 rounded-2xl text-red-200 text-sm font-medium">
-                Carteira Desconectada
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Conteúdo */}
-        {!account ? (
-          <div className="bg-white rounded-3xl shadow-sm border border-emerald-100 p-12 text-center">
-            <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
-              <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-3">Autenticação Necessária</h2>
-            <p className="text-gray-500 mb-8 max-w-md mx-auto">Conecte sua carteira para ver propostas.</p>
-            <a href="/cadastro" className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-xl transition-all">
-              Ir para o Login Web3
-            </a>
-          </div>
-        ) : (
-          <div className="space-y-12">
-            
-            {/* SEÇÃO DO PRODUTOR */}
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-                <span className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-sm">👨‍🌾</span>
-                Aguardando Recebimento de Insumos (Minhas Propostas)
-              </h2>
-              {isPendingProdutor ? (
-                <div className="flex flex-col items-center justify-center py-10 bg-white rounded-3xl border border-gray-100">
-                  <div className="w-8 h-8 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin mb-4"></div>
-                  <p className="text-indigo-700 font-medium">Buscando na blockchain...</p>
-                </div>
-              ) : propostasProdutor.length > 0 ? (
-                <div className="grid grid-cols-1 gap-6">
-                  {propostasProdutor.map((proposta) => (
-                    <div key={proposta.id.toString()} className="bg-white rounded-3xl shadow-sm border border-indigo-100 p-6 flex flex-col md:flex-row items-center justify-between gap-6 transition-all hover:shadow-md hover:border-indigo-300">
-                      <div className="flex-1 w-full">
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="bg-indigo-100 text-indigo-800 text-xs font-bold uppercase px-3 py-1 rounded-full">Proposta Aceita</span>
-                          <span className="text-gray-400 text-sm font-medium">ID #{proposta.id.toString()}</span>
-                        </div>
-                        <h3 className="text-xl font-bold text-gray-900 mb-1">{proposta.insumo}</h3>
-                        <p className="text-indigo-700 font-semibold mb-4">{proposta.sacas.toString()} Sacas</p>
-                        
-                        <div className="bg-gray-50 rounded-xl p-3 inline-flex items-center gap-2 border border-gray-100">
-                          <span className="text-xs text-gray-500 font-bold uppercase">Fornecedor:</span>
-                          <span className="font-mono text-sm text-gray-700">
-                            <UsuarioDisplay address={proposta.fornecedor} showIcon={false} />
-                          </span>
-                        </div>
-                      </div>
-                      
-                      <div className="w-full md:w-auto flex justify-end">
-                        <BotaoConfirmarInsumo contract={myContract} propostaId={proposta.id} onSuccess={handleSuccess} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="bg-white/50 border border-dashed border-gray-300 rounded-3xl p-8 text-center text-gray-500">
-                  Nenhuma proposta sua está aguardando confirmação de insumos no momento.
-                </div>
-              )}
-            </div>
-
-            <hr className="border-gray-200" />
-
-            {/* SEÇÃO DO FORNECEDOR */}
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
-                <span className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm">🏭</span>
-                Propostas Pendentes de Aceite (Para Mim)
-              </h2>
-              {isPending ? (
-                <div className="flex flex-col items-center justify-center py-10 bg-white rounded-3xl border border-gray-100">
-                  <div className="w-8 h-8 border-4 border-emerald-100 border-t-emerald-600 rounded-full animate-spin mb-4"></div>
-                  <p className="text-emerald-700 font-medium">Consultando a blockchain...</p>
-                </div>
-              ) : data && data[0].length > 0 ? (
-                <div className="grid grid-cols-1 gap-6">
-                  {data[0].map((id: any, index: number) => {
-                    const proposta = data[1][index];
-                    return (
-                      <div key={id.toString()} className="bg-white rounded-3xl shadow-sm border border-emerald-100 p-6 flex flex-col md:flex-row items-center justify-between gap-6 transition-all hover:shadow-md hover:border-emerald-300">
-                        <div className="flex-1 w-full">
-                          <div className="flex items-center gap-3 mb-2">
-                            <span className="bg-amber-100 text-amber-800 text-xs font-bold uppercase px-3 py-1 rounded-full">Proposta Pendente</span>
-                            <span className="text-gray-400 text-sm font-medium">ID #{id.toString()}</span>
-                          </div>
-                          <h3 className="text-xl font-bold text-gray-900 mb-1">{proposta.insumo}</h3>
-                          <p className="text-emerald-700 font-semibold mb-4">{proposta.sacas.toString()} Sacas</p>
-                          
-                          <div className="bg-gray-50 rounded-xl p-3 inline-flex items-center gap-2 border border-gray-100">
-                            <span className="text-xs text-gray-500 font-bold uppercase">Produtor:</span>
-                            <span className="font-mono text-sm text-gray-700">
-                              <UsuarioDisplay address={proposta.produtor} showIcon={false} />
-                            </span>
-                          </div>
-                        </div>
-                        
-                        <div className="w-full md:w-auto flex justify-end">
-                          <BotaoAceitar propostaId={id} onSuccess={handleSuccess} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="bg-white/50 border border-dashed border-gray-300 rounded-3xl p-8 text-center text-gray-500">
-                  Não há propostas de produtores aguardando o seu aceite.
-                </div>
-              )}
-            </div>
-
-          </div>
-        )}
-      </div>
+    <div className="mx-auto max-w-6xl space-y-10 px-6 py-12">
+      <header className="rounded-3xl bg-[#0A1A14] p-8 text-white"><h1 className="text-3xl font-serif font-bold">Propostas e contratos</h1><p className="mt-2 text-emerald-100/80"><UsuarioDisplay address={account.address} showIcon={false} /></p></header>
+      {loading && <p className="text-center text-gray-500">Consultando backend e blockchain...</p>}
+      {role === "FORNECEDOR" && <section><h2 className="mb-5 text-2xl font-bold">Propostas pendentes de aceite</h2>{pendentes.length === 0 ? <Empty text="Não há propostas pendentes." /> : <div className="grid gap-4">{pendentes.map((p) => <article key={p.id} className="flex flex-col justify-between gap-4 rounded-3xl border border-emerald-100 bg-white p-6 shadow-sm md:flex-row"><div><span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">Pendente</span><h3 className="mt-3 text-xl font-bold">{p.assets?.nome ?? "Insumo"}</h3><p className="text-emerald-700">{p.quantidade_comprada} {p.assets?.unidade_medida ?? "unidades"} · Safra {p.safra} · {p.tipo_cafe}{p.qualidade ? ` · ${p.qualidade}` : ""}{p.sacas_cpr != null ? ` · Total na CPR: ${p.sacas_cpr} sacas` : ""}</p><UsuarioDisplay address={p.produtor_wallet} showIcon={false} /><ReputacaoEstrelas carteira={p.produtor_wallet} /></div><AceitarProposta proposta={p} onSuccess={carregar} /></article>)}</div>}</section>}
+      {role === "PRODUTOR" && <section><h2 className="mb-5 text-2xl font-bold">Minhas propostas e respostas</h2>{enviadas.length === 0 ? <Empty text="Você ainda não enviou propostas." /> : <div className="grid gap-3">{enviadas.map((p) => <div key={p.id} className="rounded-2xl border bg-white p-4"><b>{p.assets?.nome ?? "Insumo"}</b><span className="ml-3 rounded-full bg-gray-100 px-3 py-1 text-xs font-bold">{p.status}</span><p className="text-sm text-gray-600">{p.quantidade_comprada} {p.assets?.unidade_medida ?? "unidades"} · {p.safra} · {p.tipo_cafe}{p.qualidade ? ` · ${p.qualidade}` : ""}{p.sacas_cpr != null ? ` · Total na CPR: ${p.sacas_cpr} sacas` : ""}</p></div>)}</div>}</section>}
+      <section><h2 className="mb-5 text-2xl font-bold">CPRs relacionadas à minha carteira</h2>{cprs.length === 0 ? <Empty text="Nenhuma CPR encontrada na blockchain." /> : <div className="grid gap-4 md:grid-cols-2">{cprs.map((cpr) => { const souProdutor = cpr.produtor.toLowerCase() === account.address.toLowerCase(); const podeLiquidar = cpr.donoAtual?.toLowerCase() === account.address.toLowerCase() && cpr.entregue && !cpr.liquidada; const propostaVinculada = todasPropostas.find((p) => Boolean(cpr.idPropostaOffchain) && p.id === cpr.idPropostaOffchain); const qualidadeProposta = propostaVinculada ? propostaVinculada.qualidade?.trim() || propostaVinculada.assets?.qualidade?.trim() || "Não especificado" : "Não disponível"; return <article key={cpr.tokenId.toString()} className="rounded-3xl border border-emerald-100 bg-white p-6 shadow-sm"><div className="flex justify-between"><h3 className="text-xl font-bold">CPR #{cpr.tokenId.toString()}</h3><span className={`rounded-full px-3 py-1 text-xs font-bold ${cpr.liquidada ? "bg-gray-100 text-gray-600" : cpr.entregue ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>{cpr.liquidada ? "Liquidada" : cpr.entregue ? "Entregue" : "Aguardando entrega"}</span></div><p className="mt-3 font-semibold">{cpr.insumo} · {cpr.quantidadeInsumo}</p><p className="text-sm text-gray-600">{cpr.sacas.toString()} sacas · Safra {cpr.safra} · {cpr.tipoCafe}</p><p className="mt-2 text-xs text-gray-500">Produtor: {cpr.produtor} · Fornecedor: {cpr.fornecedor}</p><div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" onClick={() => setNftSelecionado({ tokenId: cpr.tokenId, produtor: cpr.produtor, fornecedor: cpr.fornecedor, sacas: cpr.sacas, insumo: cpr.insumo, quantidadeInsumo: cpr.quantidadeInsumo, safra: cpr.safra, tipoCafe: cpr.tipoCafe, qualidade: qualidadeProposta, liquidada: cpr.liquidada })} className="rounded-xl bg-emerald-900 hover:bg-emerald-950 px-4 py-2 text-xs font-bold text-white transition-all flex items-center gap-1.5"><span>☕</span><span>Ver NFT</span></button>{souProdutor && !cpr.entregue && !cpr.liquidada && <BotaoConfirmarInsumo propostaId={cpr.tokenId} contract={contract} onSuccess={carregar} />}{podeLiquidar && <BotaoLiquidarCPR tokenId={cpr.tokenId} contract={contract} onSuccess={carregar} />}</div></article>; })}</div>}</section>
+      <ModalDetalhesNFT isOpen={nftSelecionado !== null} onClose={() => setNftSelecionado(null)} dados={nftSelecionado} />
+    </div>
   );
 }
+
+function Empty({ text }: { text: string }) { return <div className="rounded-3xl border border-dashed border-gray-300 p-8 text-center text-gray-500">{text}</div>; }

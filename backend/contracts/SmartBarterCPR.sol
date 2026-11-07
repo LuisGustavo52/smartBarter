@@ -5,115 +5,106 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 
 /**
  * @title SmartBarterCPR
- * @dev Contrato de emissão de Cédula de Produto Rural (CPR) Tokenizada.
- * Representa um acordo de Barter (troca) entre um Produtor e um Fornecedor de Insumos.
+ * @dev Emissão e ciclo de vida de Cédulas de Produto Rural tokenizadas.
  */
 contract SmartBarterCPR is ERC721 {
-    uint256 private _nextPropostaId;
+    uint256 private _nextTokenId;
 
-    struct Proposta {
+    struct CPR {
         address produtor;
         address fornecedor;
         uint256 sacas;
         string insumo;
-        bool ativa;
-        bool pendente;
-        bool insumoConfirmado;
+        string quantidadeInsumo;
+        string safra;
+        string tipoCafe;
+        string idPropostaOffchain;
+        bool aguardandoEntrega;
+        bool entregue;
+        bool liquidada;
     }
 
-    mapping(uint256 => Proposta) public propostas;
+    mapping(uint256 => CPR) public cprs;
 
-    event PropostaCriada(uint256 indexed propostaId, address indexed produtor, address indexed fornecedor, uint256 sacas, string insumo);
-    event PropostaAceita(uint256 indexed propostaId);
-    event PropostaRecusada(uint256 indexed propostaId);
-    event InsumoConfirmado(uint256 indexed propostaId);
-    event CPREmitida(uint256 indexed tokenId, address indexed fornecedor, uint256 sacas, string insumo);
+    event CPREmitida(
+        uint256 indexed tokenId,
+        address indexed produtor,
+        address indexed fornecedor,
+        uint256 sacas,
+        string insumo,
+        string quantidadeInsumo,
+        string safra,
+        string tipoCafe,
+        string idPropostaOffchain
+    );
+    event EntregaConfirmada(uint256 indexed tokenId);
     event CPRLiquidada(uint256 indexed tokenId);
 
     constructor() ERC721("SmartBarter CPR", "SBCPR") {}
 
-    function proporCPR(address _fornecedor, uint256 _sacas, string memory _insumo) external {
-        require(_fornecedor != address(0), "Fornecedor invalido");
+    function emitirCPR(
+        address _produtor,
+        uint256 _sacas,
+        string memory _insumo,
+        string memory _quantidadeInsumo,
+        string memory _safra,
+        string memory _tipoCafe,
+        string memory _idPropostaOffchain
+    ) external returns (uint256 tokenId) {
+        require(_produtor != address(0), "Produtor invalido");
         require(_sacas > 0, "Sacas deve ser maior que zero");
 
-        uint256 propostaId = _nextPropostaId++;
-        
-        propostas[propostaId] = Proposta({
-            produtor: msg.sender,
-            fornecedor: _fornecedor,
+        tokenId = _nextTokenId++;
+        cprs[tokenId] = CPR({
+            produtor: _produtor,
+            fornecedor: msg.sender,
             sacas: _sacas,
             insumo: _insumo,
-            ativa: false,
-            pendente: true,
-            insumoConfirmado: false
+            quantidadeInsumo: _quantidadeInsumo,
+            safra: _safra,
+            tipoCafe: _tipoCafe,
+            idPropostaOffchain: _idPropostaOffchain,
+            aguardandoEntrega: true,
+            entregue: false,
+            liquidada: false
         });
 
-        emit PropostaCriada(propostaId, msg.sender, _fornecedor, _sacas, _insumo);
+        _mint(msg.sender, tokenId);
+
+        emit CPREmitida(
+            tokenId,
+            _produtor,
+            msg.sender,
+            _sacas,
+            _insumo,
+            _quantidadeInsumo,
+            _safra,
+            _tipoCafe,
+            _idPropostaOffchain
+        );
     }
 
-    function aceitarProposta(uint256 _propostaId) external {
-        Proposta storage p = propostas[_propostaId];
-        require(p.pendente, "Proposta nao esta pendente");
-        require(msg.sender == p.fornecedor, "Somente fornecedor pode aceitar");
+    function confirmarEntrega(uint256 _tokenId) external {
+        CPR storage cpr = cprs[_tokenId];
+        require(msg.sender == cpr.produtor, "Somente o produtor pode confirmar");
+        require(cpr.aguardandoEntrega, "CPR nao esta aguardando entrega");
+        require(!cpr.entregue, "Entrega ja confirmada");
 
-        p.pendente = false;
-        p.ativa = true;
+        cpr.aguardandoEntrega = false;
+        cpr.entregue = true;
 
-        emit PropostaAceita(_propostaId);
-    }
-
-    function confirmarRecebimentoInsumo(uint256 _propostaId) external {
-        Proposta storage p = propostas[_propostaId];
-        require(msg.sender == p.produtor, "Somente o produtor pode confirmar");
-        require(p.ativa, "Proposta nao esta ativa/aceita");
-        require(!p.insumoConfirmado, "Insumo ja confirmado");
-
-        p.insumoConfirmado = true;
-        _mint(p.fornecedor, _propostaId);
-        
-        emit InsumoConfirmado(_propostaId);
-        emit CPREmitida(_propostaId, p.fornecedor, p.sacas, p.insumo);
-    }
-
-    function recusarProposta(uint256 _propostaId) external {
-        Proposta storage p = propostas[_propostaId];
-        require(p.pendente, "Proposta nao esta pendente");
-        require(msg.sender == p.fornecedor, "Somente fornecedor pode recusar");
-
-        p.pendente = false;
-
-        emit PropostaRecusada(_propostaId);
+        emit EntregaConfirmada(_tokenId);
     }
 
     function liquidarCPR(uint256 _tokenId) external {
-        Proposta storage p = propostas[_tokenId];
-        require(p.ativa, "SmartBarter: CPR ja liquidada ou inexistente");
+        CPR storage cpr = cprs[_tokenId];
+        require(cpr.entregue, "Insumo ainda nao foi entregue");
         require(ownerOf(_tokenId) == msg.sender, "Somente o dono do token pode liquidar");
+        require(!cpr.liquidada, "CPR ja liquidada");
 
-        p.ativa = false;
+        cpr.liquidada = true;
         _burn(_tokenId);
 
         emit CPRLiquidada(_tokenId);
-    }
-
-    function getPropostasPendentesPorFornecedor(address _fornecedor)
-        external view returns (uint256[] memory ids, Proposta[] memory pendentes) {
-        uint256 count = 0;
-        for (uint256 i = 0; i < _nextPropostaId; i++) {
-            if (propostas[i].fornecedor == _fornecedor && propostas[i].pendente) {
-                count++;
-            }
-        }
-        ids = new uint256[](count);
-        pendentes = new Proposta[](count);
-        uint256 index = 0;
-        for (uint256 i = 0; i < _nextPropostaId; i++) {
-            if (propostas[i].fornecedor == _fornecedor && propostas[i].pendente) {
-                ids[index] = i;
-                pendentes[index] = propostas[i];
-                index++;
-            }
-        }
-        return (ids, pendentes);
     }
 }

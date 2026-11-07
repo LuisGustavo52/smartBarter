@@ -2,8 +2,10 @@ import { useState } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import { prepareContractCall, sendTransaction } from "thirdweb";
 
+import { notify } from "@/lib/notify";
+
 export default function BotaoConfirmarInsumo({
-  propostaId,
+  propostaId: tokenId,
   contract,
   onSuccess,
 }: {
@@ -13,22 +15,22 @@ export default function BotaoConfirmarInsumo({
 }) {
   const account = useActiveAccount();
   const [isPending, setIsPending] = useState(false);
-  const [error, setError] = useState("");
 
   const handleConfirmar = async () => {
     if (!account) {
-      setError("Carteira não conectada.");
+      notify.error("Carteira não conectada.");
       return;
     }
 
+    let toastId;
     try {
       setIsPending(true);
-      setError("");
+      toastId = notify.loading("Confirmando recebimento...");
 
       const transaction = prepareContractCall({
         contract,
-        method: "function confirmarRecebimentoInsumo(uint256 _propostaId)",
-        params: [propostaId],
+        method: "function confirmarEntrega(uint256 _tokenId)",
+        params: [tokenId],
       });
 
       const res = await sendTransaction({ transaction, account });
@@ -37,29 +39,17 @@ export default function BotaoConfirmarInsumo({
       }
 
       setIsPending(false);
+      notify.success("Entrega confirmada! A CPR foi destravada.", toastId);
       onSuccess();
     } catch (err: any) {
+      setIsPending(false);
       if (err?.transactionHash || err?.hash) {
         console.warn("Transação transmitida com hash, ignorando erro secundário de recibo:", err);
-        setIsPending(false);
+        notify.success("Recebimento confirmado! O NFT foi emitido para o fornecedor.", toastId);
         onSuccess();
         return;
       }
-
-      if (
-        err?.message?.toLowerCase().includes("user rejected") ||
-        err?.code === 4001 ||
-        err?.name === "UserRejectedRequestError"
-      ) {
-        console.warn("Transação cancelada pelo usuário na MetaMask.");
-        setIsPending(false);
-        setError("Transação cancelada pelo usuário.");
-        return;
-      }
-
-      console.error(err);
-      setIsPending(false);
-      setError("Erro ao confirmar insumo. Tente novamente.");
+      notify.fromError(err, toastId);
     }
   };
 
@@ -79,7 +69,6 @@ export default function BotaoConfirmarInsumo({
           "Confirmar Insumo"
         )}
       </button>
-      {error && <span className="text-xs text-red-600 font-medium">{error}</span>}
     </div>
   );
 }
