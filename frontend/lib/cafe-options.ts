@@ -1,13 +1,11 @@
 export const UNIDADES_VENDA = [
   "unidade",
-  "saco 50 kg",
   "saco 25 kg",
-  "Sacos (50 kg)",
+  "saco 50 kg",
   "litro",
-  "tonelada",
-  "ton",
   "galão",
   "kg",
+  "tonelada",
 ] as const;
 
 export const TIPOS_CAFE = ["Arábica", "Conilon / Robusta"] as const;

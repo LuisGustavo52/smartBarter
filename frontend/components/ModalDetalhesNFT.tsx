@@ -194,7 +194,7 @@ export default function ModalDetalhesNFT({
               Qualidade
             </span>
             <span className="font-medium text-white">
-              {dados.qualidade?.trim() ? dados.qualidade : "Não especificado"}
+              {dados.qualidade?.trim() ? dados.qualidade : "Não disponível"}
             </span>
           </div>
         </div>

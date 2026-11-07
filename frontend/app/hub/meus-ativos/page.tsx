@@ -619,12 +619,13 @@ export default function MeusAtivosPage() {
                   const souDonoDoToken =
                     cpr.donoAtual?.toLowerCase() === account.address.toLowerCase();
                   const propostaVinculada = propostasCarteira.find(
-                    (p) =>
-                      (cpr.idPropostaOffchain && p.id === cpr.idPropostaOffchain) ||
-                      (p.token_id != null && String(p.token_id) === cpr.tokenId.toString())
+                    (p) => Boolean(cpr.idPropostaOffchain) && p.id === cpr.idPropostaOffchain
                   );
-                  const qualidadeProposta =
-                    propostaVinculada?.qualidade ?? propostaVinculada?.assets?.qualidade ?? null;
+                  const qualidadeProposta = propostaVinculada
+                    ? propostaVinculada.qualidade?.trim() ||
+                      propostaVinculada.assets?.qualidade?.trim() ||
+                      "Não especificado"
+                    : "Não disponível";
 
                   return (
                     <div
